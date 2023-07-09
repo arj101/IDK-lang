@@ -1,0 +1,2 @@
+println(pow(2, 32))
+println(JSON_dot_stringify(globalThis))

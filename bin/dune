@@ -1,0 +1,4 @@
+(executable
+ (public_name idk)
+ (name main)
+ (libraries idk mtime mtime.clock mtime.clock.os))

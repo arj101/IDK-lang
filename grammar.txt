@@ -1,0 +1,46 @@
+program        = expression* EOF ;
+
+Eol = ";" | "\n"
+
+expression =
+	| forExpr
+	| whileExpr
+	| ifExpr
+	| funExpr
+	| blockExpr
+	| stmtExpr
+	| logicOr
+
+stmtExpr  =
+        | letDecl
+        | returnStmt
+	| printStmt
+	| assignment
+	
+letDecl = "let" IDENTIFIER = expression
+
+assignment = maybeCall "=" expression
+
+
+logicOr = logicAnd ( "or" logicOr )? 
+logicAnd = equality ( "and" logicAnd )?
+
+equality = comparison ( ( "!=" | "==" ) equality )?
+comparison = term ( ( ">=" | ">" | "<" | "<=" ) comparison )?
+term = factor ( ( "-" | "+" ) term )?
+factor = unary ( ( "/" | "*" ) factor )?
+
+unary = ( "!" | "-" ) unary | maybeCall
+
+maybeCall = primary arrayAccess? ("." maybeCall )?
+
+arrayAccess = index? | call? => arrayAccess
+
+index = "[" arrayElements? "]" index?
+arrayElements = expression ","? arrayElements?
+
+call = "(" arguments? ")" call?
+arguments = expression ","? arguments?
+
+
+primary = "true" | "false" | "null" | NUMBER | STRING | IDENTIFIER | "(" expression ")" 
