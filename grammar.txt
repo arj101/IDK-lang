@@ -1,25 +1,41 @@
-program        = expression* EOF ;
+program        = expression ; //parsed as a block of expressions
 
-Eol = ";" | "\n"
 
 expression =
 	| forExpr
 	| whileExpr
 	| ifExpr
 	| funExpr
-	| blockExpr
 	| stmtExpr
 	| logicOr
+        | letDecl
+	| assignment
+	| classDecl
+	| classInstantiation
 
 stmtExpr  =
-        | letDecl
         | returnStmt
 	| printStmt
-	| assignment
 	
+
+classDecl = class IDENTIFIER { fields? };
+
+classInstantiation = "new" IDENTIFIER(arguments?);
+
+fields = funExpr fields?
+
 letDecl = "let" IDENTIFIER = expression
 
 assignment = maybeCall "=" expression
+
+
+forExpr = for expression ";"? expression ";"? expression ";"? do? expression
+whileExpr = while expression do? expression
+
+ifExpr = if expression then? expression (else expression)?
+funExpr = fun IDENTIFIER?(parameters?) expression
+
+parameters = IDENTIFIER ","? parameters?
 
 
 logicOr = logicAnd ( "or" logicOr )? 
@@ -32,15 +48,17 @@ factor = unary ( ( "/" | "*" ) factor )?
 
 unary = ( "!" | "-" ) unary | maybeCall
 
-maybeCall = primary arrayAccess? ("." maybeCall )?
+maybeCall = primary call? ("." maybeCall )?
 
-arrayAccess = index? | call? => arrayAccess
-
-index = "[" arrayElements? "]" index?
 arrayElements = expression ","? arrayElements?
 
 call = "(" arguments? ")" call?
 arguments = expression ","? arguments?
 
 
-primary = "true" | "false" | "null" | NUMBER | STRING | IDENTIFIER | "(" expression ")" 
+primary = "true" | "false" | "null" | NUMBER | STRING | IDENTIFIER | "(" expression ")" | ("{" blockExpr | objectExpr "}") | arrayExpr
+
+objectExpr = expression ":" expression ","? objectExpr
+blockExpr = expression ";"? blockExpr?
+
+arrayExpr = "[" arrayElements "]"

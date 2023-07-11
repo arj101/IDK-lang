@@ -37,7 +37,36 @@ and expression tokens =
       (* | LeftBrace :: others -> maybe_object others *)
       (*BOTH objects and scopes have high precedence because they can be used with other operators*)
   | For :: others -> for_expr others
+  | Class :: others -> class_decl others
   | others -> maybe_assignment others
+
+and class_decl tokens =
+  let remaining_tokens, ident =
+    match tokens with
+    | Ident name :: others -> (others, name)
+    | others -> raise (UnexpectedSequence others)
+  in
+  match consume_newlines remaining_tokens with
+  | LeftBrace :: others ->
+      let rec get_functions tokens_remaining acc =
+        match consume_newlines tokens_remaining with
+        | Ident name :: others as tokens ->
+            if String.equal name ident then
+              let tokens_remaining, expr = fun_expr tokens in
+              get_functions tokens_remaining (List.append acc [ expr ])
+            else (
+              print_string
+                "Only constructors can be declared without 'fun' keyword\n";
+              raise (UnexpectedSequence tokens))
+        | Fun :: others ->
+            let tokens_remaining, expr = fun_expr others in
+            get_functions tokens_remaining (List.append acc [ expr ])
+        | RightBrace :: others -> (others, acc)
+        | others -> raise (UnexpectedSequence others)
+      in
+      let remaining_toknes, fns = get_functions others [] in
+      (remaining_toknes, ClassDecl (ident, fns))
+  | others -> raise (UnexpectedSequence others)
 
 and maybe_object tokens =
   let remaining_tokens = consume_newlines tokens in
@@ -395,8 +424,13 @@ and primary tokens =
   | Str s :: others -> (others, Value (Literal (Str s)))
   | Ident name :: others -> (others, Value (Variable name))
   | LeftSquareBrace :: others -> array others
+  | New :: others -> class_instantiate others
   | This :: others -> (others, This)
   | others -> raise (UnexpectedSequence others)
+
+and class_instantiate tokens =
+  let tokens_remaining, expr = maybe_call tokens in
+  (tokens_remaining, ClassInst expr)
 
 and array tokens =
   let rec consume_comma = function

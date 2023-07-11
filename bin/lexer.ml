@@ -192,6 +192,8 @@ let tokenise (s : string) : tokentype list =
           | "let" -> add_token Let
           | "then" -> add_token Then
           | "break" -> add_token Break
+          | "new" -> add_token New
+          | "class" -> add_token Class
           | _ as sub_s -> add_token (Ident sub_s))
       | c -> raise (UnexpectedCharacter c)
     done;

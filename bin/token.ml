@@ -50,6 +50,8 @@ type tokentype =
   | Eof
   | Then
   | Break
+  | New
+  | Class
 
 let string_of_tokentype (t : tokentype) : string =
   match t with
@@ -92,6 +94,8 @@ let string_of_tokentype (t : tokentype) : string =
   | Do -> "do"
   | For -> "for"
   | Let -> "let"
+  | Class -> "class"
+  | New -> "new"
   | Print -> "print"
   | True -> "true"
   | False -> "false"

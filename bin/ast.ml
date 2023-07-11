@@ -54,6 +54,10 @@ and string_of_expr (e : expr) =
             acc ^ Printf.sprintf "field( %s : %s )" k (string_of_expr v) ^ ", ")
           fields ""
       ^ " }"
+  | ClassDecl (name, fields) ->
+      Printf.sprintf "class %s { %s }" name
+        (String.concat ", " (List.map string_of_expr fields))
+  | ClassInst expr -> Printf.sprintf "new( %s )" (string_of_expr expr)
 
 and string_of_stmt (s : stmt) =
   match s with
@@ -100,7 +104,7 @@ and string_of_literal (l : literal) =
 
 and val_to_string (v : value) =
   match v with
-  | Object fields -> "<Object object>"
+  | Object _ -> "<Object object>"
   | Fun (name, params, _) ->
       Printf.sprintf "<fun %s(%s)>"
         (match name with Some name -> name | None -> "[anonymous]")
@@ -129,12 +133,13 @@ and val_to_string (v : value) =
 and obj_to_string visited_envs obj =
   let rec obj_to_string_aux indent visited_envs obj =
     match obj with
-    | Object field_env ->
+    | Object (name, field_env) ->
         if Option.is_some (List.find_opt (fun e -> e == field_env) visited_envs)
         then "<Recursive Object>"
         else
           let visited_envs = List.concat [ [ field_env ]; visited_envs ] in
-          Printf.sprintf "[Object]{%s\n%s}"
+          Printf.sprintf "%s{%s\n%s}"
+            (match name with Some name -> name | _ -> "[Object]")
             (Hashtbl.fold
                (fun k v acc ->
                  if String.equal k "this" then acc

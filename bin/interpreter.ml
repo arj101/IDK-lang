@@ -27,7 +27,7 @@ let rec interpret expr =
   let env = Env.create None in
   def_ext_funs env;
   def_consts env;
-  Env.define env "globalThis" (Object env);
+  Env.define env "globalThis" (Object (Some "GlobalEnvironment", env));
   try eval_expr env expr
   with FnReturn value ->
     Printf.printf
@@ -108,7 +108,7 @@ and exec _ = function
   | _ -> Literal Null
 
 and object_to_string _ = function
-  | (Object field_env as obj) :: _ -> Literal (Str (Ast.obj_to_string [] obj))
+  | (Object _ as obj) :: _ -> Literal (Str (Ast.obj_to_string [] obj))
   | _ -> raise TypeError
 
 and cos _ = function
@@ -136,11 +136,13 @@ and atan _ = function
   | _ -> raise TypeError
 
 and atan2 _ = function
-  | Literal (Num y) :: Literal (Num x) :: others -> Literal (Num (Float.atan2 y x))
+  | Literal (Num y) :: Literal (Num x) :: others ->
+      Literal (Num (Float.atan2 y x))
   | _ -> raise TypeError
 
 and pow _ = function
-  | Literal (Num n) :: Literal (Num p) :: others -> Literal(Num (Float.pow n p))
+  | Literal (Num n) :: Literal (Num p) :: others ->
+      Literal (Num (Float.pow n p))
   | _ -> raise TypeError
 
 and sqrt _ = function
@@ -187,6 +189,7 @@ and def_ext_funs env =
   def_fn "flush_stdout" [] flush_stdout;
   def_fn "exec" [ "command" ] exec;
   def_fn "JSON_dot_stringify" [ "object" ] object_to_string;
+  def_fn "stringify" [ "object" ] object_to_string;
   def_fn "cos" [ "num" ] cos;
   def_fn "sin" [ "num" ] sin;
   def_fn "tan" [ "num" ] tan;
@@ -229,6 +232,75 @@ and eval_expr env expr =
   | ObjectExpr fields -> object_expr env fields
   | ArrayExpr exprs -> eval_array env exprs
   | This -> Env.get (Option.get env.this_ref) "this"
+  | ClassDecl (name, methods) ->
+      Env.define_virtual env name
+        (Class
+           ( name,
+             let fields = Hashtbl.create (List.length methods) in
+             List.iter
+               (fun v ->
+                 match v with
+                 | Value (Fun (Some name, args, body)) ->
+                     Hashtbl.replace fields name
+                       (ClosureFun (env, Some name, args, body))
+                 | _ -> raise TypeError)
+               methods;
+             fields ));
+      Literal Null
+  | ClassInst expr -> class_inst env expr
+
+and class_inst env expr =
+  match expr with
+  | Call (Value (Variable class_name), args) -> (
+      match Env.get_virtual env class_name with
+      | Class (_name, fns) ->
+          (* Printf.printf "found class %s\n" _name; *)
+          (* Hashtbl.iter (fun k v -> Printf.printf "%s -> %s\n" k (string_of_value v)) fns; *)
+          let this_val_env = Env.create (Some env) in
+          this_val_env.scope <-
+            Hashtbl.of_seq
+              (Seq.filter
+                 (fun (name, _) -> not (String.equal name class_name))
+                 (Hashtbl.to_seq fns));
+          Env.define this_val_env "this"
+            (Object (Some class_name, this_val_env));
+          this_val_env.this_ref <- Some this_val_env;
+
+          let instance = Object (Some class_name, this_val_env) in
+          let this_ref_env =
+            match Hashtbl.find_opt fns class_name with
+            | Some (ClosureFun (closure_env, class_name, params, body)) ->
+                let this_ref_env =
+                  create_this_ref_wrapper closure_env (Some this_val_env)
+                in
+                call_aux this_ref_env class_name
+                  (List.map (fun a -> Value (eval_expr env a)) args)
+                  params body
+                |> ignore;
+                this_ref_env
+            | Some _ -> assert false
+            | None ->
+                raise
+                  (TypeErrorWithInfo
+                     (Printf.sprintf
+                        "The class %s doesnt have a constructor function"
+                        class_name))
+          in
+
+          Hashtbl.iter
+            (fun fname f ->
+              match f with
+              | ClosureFun (env, name, params, body) ->
+                  Hashtbl.replace this_val_env.scope fname
+                    (ClosureFun (this_ref_env, name, params, body))
+              | _ -> ())
+            this_val_env.scope;
+
+          instance)
+  | _ ->
+      raise
+        (TypeErrorWithInfo
+           "Expected a single depth function-call-like syntax after 'new'")
 
 and eval_array env exprs =
   let rec array_aux acc remaining_exprs =
@@ -241,14 +313,14 @@ and eval_array env exprs =
 
 and object_expr env fields =
   let this_val_env = Env.create (Some env) in
-  Env.define this_val_env "this" (Object this_val_env);
+  Env.define this_val_env "this" (Object (None, this_val_env));
   this_val_env.this_ref <- Some this_val_env;
 
   Hashtbl.iter
     (fun k v -> Env.define this_val_env k (eval_expr this_val_env v))
     fields;
 
-  Object this_val_env
+  Object (None, this_val_env)
 
 and locator env lexpr rexpr =
   let lvalue = eval_expr env lexpr in
@@ -266,7 +338,7 @@ and locator env lexpr rexpr =
       | Value v -> indexv v
       | _ -> raise (TypeErrorWithInfo "Arrays can only be indexed with numbers")
       )
-  | Object fields -> (
+  | Object (_, fields) -> (
       match rexpr with
       | Grouping expr ->
           Env.get_field fields
@@ -299,94 +371,35 @@ and locator env lexpr rexpr =
       | expr ->
           assert (
             match expr with Call _ | Value (Variable _) -> true | _ -> false);
+          let expr =
+            match expr with
+            | Call (callee, args) ->
+                Call (callee, List.map (fun a -> Value (eval_expr env a)) args)
+            | expr -> expr
+          in
           eval_expr (Env.create_object_wrapper fields) expr)
   | _ -> raise (TypeErrorWithInfo "dot operator can only be used with Objects")
 
-and locator' env lexpr rexpr =
-  let lvalue = eval_expr env lexpr in
-  let rec aux_locator lvalue rexpr =
-    match lvalue with
-    | Object fields -> (
-        match rexpr with
-        | Value (Variable name) -> Hashtbl.find fields.scope name
-        | Call (Value (Variable name), args) ->
-            let call_value = Hashtbl.find fields.scope name in
-            call env (Value call_value) args
-        | Call (call_expr, args) ->
-            let rec rec_call call_expr args =
-              match call_expr with
-              | Call (call_expr, args) -> (
-                  match rec_call call_expr args with
-                  | (Fun _ as f) | (ClosureFun _ as f) ->
-                      call env (Value f) args
-                  | _ -> raise (TypeErrorWithInfo "REE"))
-              | Value (Variable name) ->
-                  call env (Value (Hashtbl.find fields.scope name)) args
-              | expr -> (
-                  match try_to_str env (eval_expr env expr) with
-                  | Literal (Str name) ->
-                      call env (Value (Hashtbl.find fields.scope name)) args
-                  | _ -> raise TypeError)
-            in
-            rec_call call_expr args
-        | Locator (Value (Variable name), rexpr) ->
-            aux_locator (Hashtbl.find fields.scope name) rexpr
-        | Locator (Call (Value (Variable name), args), rexpr) ->
-            let call_value = Hashtbl.find fields.scope name in
-            let value = call env (Value call_value) args in
-            aux_locator value rexpr
-        | Locator (Call (call_expr, args), rexpr) ->
-            let rec rec_call call_expr args =
-              match call_expr with
-              | Call (call_expr, args) -> (
-                  match rec_call call_expr args with
-                  | (Fun _ as f) | (ClosureFun _ as f) ->
-                      call env (Value f) args
-                  | _ -> raise TypeError)
-              | Value (Variable name) ->
-                  call env (Value (Hashtbl.find fields.scope name)) args
-              | expr -> (
-                  match try_to_str env (eval_expr env expr) with
-                  | Literal (Str name) ->
-                      call env (Value (Hashtbl.find fields.scope name)) args
-                  | _ -> raise TypeError)
-            in
-            aux_locator (rec_call call_expr args) rexpr
-        | Locator (lexpr, rexpr) -> (
-            let lexpr_val = eval_expr env lexpr in
-            match try_to_str env lexpr_val with
-            | Literal (Str name) ->
-                aux_locator (Hashtbl.find fields.scope name) rexpr
-            | _ -> raise TypeError)
-        | rexpr -> (
-            let rexpr = eval_expr env rexpr in
-            match try_to_str env rexpr with
-            | Literal (Str name) -> Hashtbl.find fields.scope name
-            | _ -> raise TypeError))
-    | _ -> raise TypeError
-  in
-  aux_locator lvalue rexpr
+and call_aux parent_env name args params body_expr =
+  try
+    in_new_scope parent_env (fun env ->
+        List.iteri
+          (fun i param ->
+            match List.nth_opt args i with
+            | Some value -> Env.define env param (eval_expr env value)
+            | None -> Env.define env param (Literal Null))
+          params;
+        eval_expr env body_expr)
+  with FnReturn value -> value
 
 and call parent_env call_expr args =
   let call_val = eval_expr parent_env call_expr in
 
-  let rec call_aux parent_env name params body_expr =
-    try
-      in_new_scope parent_env (fun env ->
-          List.iteri
-            (fun i param ->
-              match List.nth_opt args i with
-              | Some value -> Env.define env param (eval_expr env value)
-              | None -> Env.define env param (Literal Null))
-            params;
-          eval_expr env body_expr)
-    with FnReturn value -> value
-  in
-
   match call_val with
-  | Fun (name, params, body_expr) -> call_aux parent_env name params body_expr
+  | Fun (name, params, body_expr) ->
+      call_aux parent_env name args params body_expr
   | ClosureFun (parent_env, name, params, body_expr) ->
-      call_aux parent_env name params body_expr
+      call_aux parent_env name args params body_expr
   | ExtFun (_, _, f) -> f parent_env (List.map (eval_expr parent_env) args)
   | _ -> raise TypeError
 
@@ -558,7 +571,7 @@ and eval_block parent_env exprs =
   let value =
     in_new_scope parent_env (fun env ->
         if Option.is_some (Hashtbl.find_opt parent_env.scope "typeof") then
-          Env.define parent_env "__child_scope__" (Object env)
+          Env.define parent_env "__child_scope__" (Object (None, env))
         else ();
         block_aux env exprs)
   in
@@ -602,7 +615,7 @@ and locator_assign env lexpr rexpr rrexpr =
       | Value v -> indexv v
       | _ -> raise (TypeErrorWithInfo "Arrays can only be indexed with numbers")
       )
-  | Object fields as lvalue -> (
+  | Object (_, fields) as lvalue -> (
       match rexpr with
       | Grouping expr ->
           Env.set_field fields
@@ -648,56 +661,6 @@ and locator_assign env lexpr rexpr rrexpr =
                 assigning to a function call doesn't make sense")
       | _ -> assert false)
   | _ -> raise (TypeErrorWithInfo "dot operator can only be used with Objects")
-
-and locator_assign' env lexpr rexpr rrexpr =
-  let rrvalue = eval_expr env rrexpr in
-  let lvalue = eval_expr env lexpr in
-  let rec aux_locator lvalue rexpr =
-    match lvalue with
-    | Object fields -> (
-        match rexpr with
-        | Value (Variable name) ->
-            Env.define fields name rrvalue;
-            lvalue
-        | Locator (Value (Variable name), rexpr) ->
-            aux_locator (Hashtbl.find fields.scope name) rexpr
-        | Locator (Call (Value (Variable name), args), rexpr) ->
-            let call_value = Hashtbl.find fields.scope name in
-            let value = call env (Value call_value) args in
-            aux_locator value rexpr
-        | Locator (Call (call_expr, args), rexpr) ->
-            let rec rec_call call_expr args =
-              match call_expr with
-              | Call (call_expr, args) -> (
-                  match rec_call call_expr args with
-                  | (Fun _ as f) | (ClosureFun _ as f) ->
-                      call env (Value f) args
-                  | _ -> raise TypeError)
-              | Value (Variable name) ->
-                  call env (Value (Hashtbl.find fields.scope name)) args
-              | expr -> (
-                  match try_to_str env (eval_expr env expr) with
-                  | Literal (Str name) ->
-                      call env (Value (Hashtbl.find fields.scope name)) args
-                  | _ -> raise TypeError)
-            in
-            aux_locator (rec_call call_expr args) rexpr
-        | Locator (lexpr, rexpr) -> (
-            let lexpr_val = eval_expr env lexpr in
-            match try_to_str env lexpr_val with
-            | Literal (Str name) ->
-                aux_locator (Hashtbl.find fields.scope name) rexpr
-            | _ -> raise TypeError)
-        | rexpr -> (
-            let rexpr = eval_expr env rexpr in
-            match try_to_str env rexpr with
-            | Literal (Str name) ->
-                Env.define fields name rrvalue;
-                lvalue
-            | _ -> raise TypeError))
-    | _ -> raise TypeError
-  in
-  aux_locator lvalue rexpr
 
 and eval_value env value =
   match value with
@@ -748,7 +711,8 @@ and try_to_str env = function
 and to_bool env = function
   | Fun _ -> true
   | ClosureFun _ -> true
-  | Object fields -> Hashtbl.length fields.scope > 1 (*ignore the 'this' field*)
+  | Object (_, fields) ->
+      Hashtbl.length fields.scope > 1 (*ignore the 'this' field*)
   | ExtFun _ -> true
   | Variable name -> to_bool env (Env.get env name)
   | Array values -> Array.length !values > 0

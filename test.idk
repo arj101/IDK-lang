@@ -1,2 +1,44 @@
-println(pow(2, 32))
-println(JSON_dot_stringify(globalThis))
+class Point{
+    Point(x, y) {
+        this.x = x
+        this.y = y
+    }
+
+    fun offset(xoff, yoff) {
+        this.x = this.x + xoff
+        this.y = this.y + yoff
+    }
+
+    fun toString() {
+        "Point( "+ this.x + ", " + this.y + " )"
+    }
+}
+class Rectangle{
+    Rectangle(x1, y1, x2, y2) {
+        this.points = [
+            new Point(x1, y1)
+            new Point(x2, y1)
+            new Point(x2, y2)
+            new Point(x2, y1)
+        ]
+    }
+
+    fun offset(xoff, yoff) {
+        for let i = 0; i < 4; i = i + 1 do
+        this.points.(i).offset(xoff, yoff)
+    }
+
+    fun show() {
+        println("Rectangle{ ");
+        for let i = 0; i < 4; i = i + 1 {
+            println("    " + this.points.(i).toString())
+        }
+        println("}")
+    }
+}
+
+let rect = new Rectangle(0 0 80 50);
+
+rect.show()
+rect.offset(10, 10)
+rect.show()
