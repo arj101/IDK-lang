@@ -6,6 +6,7 @@ exception UnexpectedToken of tokentype
 exception UnexpectedEof
 exception UnexpectedSequence of tokentype list
 exception UnexpectedSyntaxTree
+exception UnexpectedSyntaxTreeWithInfo of string
 
 let identity tokens = (tokens, Value (Literal Null))
 
@@ -60,6 +61,15 @@ and class_decl tokens =
               raise (UnexpectedSequence tokens))
         | Fun :: others ->
             let tokens_remaining, expr = fun_expr others in
+            (match expr with
+            | Value (Fun (Some name, _, _)) ->
+                if String.equal name ident then
+                  raise
+                    (UnexpectedSyntaxTreeWithInfo
+                       "Constructor function should start without a 'fun' \
+                        keyword")
+                else ()
+            | _ -> assert false);
             get_functions tokens_remaining (List.append acc [ expr ])
         | RightBrace :: others -> (others, acc)
         | others -> raise (UnexpectedSequence others)
@@ -101,12 +111,14 @@ and object_expr tokens =
   aux_loop (Hashtbl.create 16) tokens
 
 and maybe_assignment tokens =
-  let remaining_tokens, lexpr = locator tokens in
-  match remaining_tokens with
-  | Equal :: others ->
-      let remaining_tokens, rexpr = expression others in
-      (remaining_tokens, StmtExpr (LocatorAssign (lexpr, rexpr)))
-  | others -> logic_or tokens (*expensive backtracking, idk how to fix this*)
+  try
+    let remaining_tokens, lexpr = locator tokens in
+    match remaining_tokens with
+    | Equal :: others ->
+        let remaining_tokens, rexpr = expression others in
+        (remaining_tokens, StmtExpr (LocatorAssign (lexpr, rexpr)))
+    | others -> logic_or tokens (*expensive backtracking, idk how to fix this*)
+  with UnexpectedSequence _ -> logic_or tokens
 
 and consume_newlines = function
   | Newline :: others -> consume_newlines others
@@ -420,7 +432,9 @@ and primary tokens =
   | True :: others -> (others, Value (Literal (Bool true)))
   | False :: others -> (others, Value (Literal (Bool false)))
   | Null :: others -> (others, Value (Literal Null))
-  | Number n :: others -> (others, Value (Literal (Num n)))
+  | Number n :: others | Plus :: Number n :: others ->
+      (others, Value (Literal (Num n)))
+  | Minus :: Number n :: others -> (others, Value (Literal (Num (n *. -1.0))))
   | Str s :: others -> (others, Value (Literal (Str s)))
   | Ident name :: others -> (others, Value (Variable name))
   | LeftSquareBrace :: others -> array others

@@ -24,16 +24,17 @@ class Rectangle{
     }
 
     fun offset(xoff, yoff) {
-        for let i = 0; i < 4; i = i + 1 do
-        this.points.(i).offset(xoff, yoff)
+        for let i = 0; i < 4; i = i + 1 {
+            this.points.(i).offset(xoff, yoff)
+        }
     }
 
     fun show() {
-        println("Rectangle{ ");
+        println("Rectangle {");
         for let i = 0; i < 4; i = i + 1 {
             println("    " + this.points.(i).toString())
         }
-        println("}")
+        println("} ")
     }
 }
 

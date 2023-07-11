@@ -322,6 +322,13 @@ and object_expr env fields =
 
   Object (None, this_val_env)
 
+and eval_fn_args env = function
+  | Call (callee, args) ->
+      Call
+        ( eval_fn_args env callee,
+          List.map (fun a -> Value (eval_expr env a)) args )
+  | others -> others
+
 and locator env lexpr rexpr =
   let lvalue = eval_expr env lexpr in
   match lvalue with
@@ -371,12 +378,7 @@ and locator env lexpr rexpr =
       | expr ->
           assert (
             match expr with Call _ | Value (Variable _) -> true | _ -> false);
-          let expr =
-            match expr with
-            | Call (callee, args) ->
-                Call (callee, List.map (fun a -> Value (eval_expr env a)) args)
-            | expr -> expr
-          in
+          let expr = eval_fn_args env expr in
           eval_expr (Env.create_object_wrapper fields) expr)
   | _ -> raise (TypeErrorWithInfo "dot operator can only be used with Objects")
 
