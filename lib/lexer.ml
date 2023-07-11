@@ -6,6 +6,8 @@ exception UnexpectedEof
 exception Unimplemented of string
 exception ParsedVal
 
+exception AtEnd
+
 let tokenise (s : string) : tokentype list =
   let line = ref 0 in
   let pos = ref 0 in
@@ -25,7 +27,7 @@ let tokenise (s : string) : tokentype list =
     else false
   in
 
-  let is_at_end pos = !pos >= String.length s - 1 in
+  let is_at_end pos = !pos >= String.length s in
 
   let parse_string (delim : char) =
     let sbuf = Buffer.create 16 in
@@ -96,9 +98,12 @@ let tokenise (s : string) : tokentype list =
           else
             match s.[!pos + 1] with
             | '/' ->
+                (try
                 while s.[!pos] != '\n' do
-                  incr pos
+                  incr pos;
+                  if is_at_end pos then raise AtEnd else ();
                 done;
+                with AtEnd -> ());
                 incr pos;
                 incr line
             | '=' ->
@@ -117,13 +122,15 @@ let tokenise (s : string) : tokentype list =
       | '0' .. '9' ->
           (let len = ref 0 in
            let parse_num_sequence curr_len =
+             try 
              while
                (match s.[!pos] with '0' .. '9' -> true | _ -> false)
-               && not (is_at_end pos)
              do
                incr pos;
-               incr curr_len
+               incr curr_len;
+               if is_at_end pos then raise AtEnd else ();
              done
+             with AtEnd -> ();
            in
            try
              parse_num_sequence len;

@@ -1,2 +1,3 @@
 (library
- (name idk))
+ (name idk)
+ (libraries mtime mtime.clock mtime.clock.os))

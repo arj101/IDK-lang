@@ -1,11 +1,14 @@
 open Printf
-open Lexer
-open Token
-open Ast
-open Parser
-open Env
-open Interpreter
-open Lexer
+open Idk
+open Idk.Ast
+open Idk.Env
+open Idk.Lexer
+open Idk.Env
+open Idk.Interpreter
+open Idk.Token
+open Idk.Parser
+open Mtime
+open Mtime_clock
 
 let read_to_string path =
   let ic = open_in path in
