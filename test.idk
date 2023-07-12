@@ -1,45 +1,19 @@
-class Point{
-    Point(x, y) {
-        this.x = x
-        this.y = y
-    }
+let a = [10,20,30,40]
+let b = [50,60 ,70, 80]
 
-    fun offset(xoff, yoff) {
-        this.x = this.x + xoff
-        this.y = this.y + yoff
-    }
 
-    fun toString() {
-        "Point( "+ this.x + ", " + this.y + " )"
+//[[10, 50], 10] -> [10, 50, 10]
+fun flatten(array) {
+    for let i = 0; i < length(array); i = i + 1 {
+        let newElt = [0, 0, 0]
+        newElt.0 = array.(i).(0).0
+        newElt.1 = array.(i).(0).1
+        newElt.2 = array.(i).1
+        array.(i) = newElt
     }
-}
-class Rectangle{
-    Rectangle(x1, y1, x2, y2) {
-        this.points = [
-            new Point(x1, y1)
-            new Point(x2, y1)
-            new Point(x2, y2)
-            new Point(x2, y1)
-        ]
-    }
-
-    fun offset(xoff, yoff) {
-        for let i = 0; i < 4; i = i + 1 {
-            this.points.(i).offset(xoff, yoff)
-        }
-    }
-
-    fun show() {
-        println("Rectangle {");
-        for let i = 0; i < 4; i = i + 1 {
-            println("    " + this.points.(i).toString())
-        }
-        println("} ")
-    }
+    array
 }
 
-let rect = new Rectangle(0 0 80 50);
+println(flatten(a * b * a))
 
-rect.show()
-rect.offset(10, 10)
-rect.show()
+println(stoa("Shiyad"))

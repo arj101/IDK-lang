@@ -178,6 +178,7 @@ let tokenise (s : string) : tokentype list =
             then len
             else (
               incr pos;
+              if is_at_end pos then len+1 else  (*idk why this works*)
               aux (len + 1))
           in
           let len = aux 0 in

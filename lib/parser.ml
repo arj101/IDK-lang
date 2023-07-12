@@ -356,13 +356,13 @@ and factor tokens =
   let rec factor_aux tokens_remaining acc prev_operator =
     let tokens_remaining, expr = unary tokens_remaining in
     match consume_newlines tokens_remaining with
-    | (Slash as operator) :: others | (Star as operator) :: others ->
+    | (Slash as operator) :: others | (Star as operator) :: others | (Percentage as operator) :: others ->
         factor_aux others (Binary (acc, prev_operator, expr)) operator
     | others -> (others, Binary (acc, prev_operator, expr))
   in
   let tokens_remaining, leftmost_expr = unary tokens in
   match consume_newlines tokens_remaining with
-  | (Slash as operator) :: others | (Star as operator) :: others ->
+  | (Slash as operator) :: others | (Star as operator) :: others | (Percentage as operator) ::others ->
       factor_aux others leftmost_expr operator
   | others -> (others, leftmost_expr)
 

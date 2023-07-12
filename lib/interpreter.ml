@@ -74,6 +74,8 @@ and parse_num _ = function
 
 and typeof _ = function
   | Fun _ :: _ -> Literal (Str "function")
+  | Array _ :: _ -> Literal (Str "array" )
+  | Object _ :: _ -> Literal (Str "object")
   | ClosureFun _ :: _ -> Literal (Str "closure")
   | ExtFun _ :: _ -> Literal (Str "external_function")
   | Variable _ :: _ -> Literal (Str "unevaluated_variable")
@@ -174,6 +176,19 @@ and getenv _ = function
         | _ -> Null)
   | _ -> raise TypeError
 
+and array_length _ = function
+  | Array elts :: _ ->  Literal (Num (float_of_int (Array.length !elts)))
+  | _ -> raise TypeError
+
+and string_to_ascii _ = function
+  | Literal (Str s) :: _ -> 
+      Array (ref (Array.of_seq (Seq.map (fun c -> Literal(Num (float_of_int(Char.code c)))) (String.to_seq s))))
+  | _ -> raise TypeError
+
+and ascii_to_string _ = function
+  | Array elts :: _ -> Literal (Str (String.of_seq (Array.to_seq (Array.map (fun e -> (match e with | Literal (Num n) -> Char.chr (int_of_float n) | _ -> raise TypeError)) !elts))))
+  | _ -> raise TypeError
+
 (*external function definitions, loaded at startup*)
 and def_ext_funs env =
   let def_fn name params f = Env.define env name (ExtFun (name, params, f)) in
@@ -204,7 +219,10 @@ and def_ext_funs env =
   def_fn "log2" [ "num" ] log2;
   def_fn "log10" [ "num" ] log10;
   def_fn "exp" [ "num" ] exp;
-  def_fn "sys_getenv" [ "name" ] getenv
+  def_fn "sys_getenv" [ "name" ] getenv;
+  def_fn "length" [ "array" ] array_length;
+  def_fn "stoa" ["string"] string_to_ascii;
+  def_fn "atos" ["ascii"] ascii_to_string;
 
 and def_consts env =
   let def_num name value = Env.define env name (Literal (Num value)) in

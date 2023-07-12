@@ -36,10 +36,17 @@ let () = test "Lexer" [
   ("numbers", fun _ -> tokenised_eq "23" [Number(23.)]);
   ("numbers", fun _ -> tokenised_eq "23e10" [Number(23e10)]);
   ("numbers", fun _ -> tokenised_eq "23.34" [Number(23.34)]);
-  ("numbers", fun _ -> tokenised_eq  "23" [Number(23.)]);
+  ("numbers", fun _ -> tokenised_eq  "23e-2" [Number(23e-2)]);
   ("numbers", fun _ -> tokenised_eq  "123.0456789" [Number(123.0456789)]);
   ("numbers", fun _ -> tokenised_eq  "1.2e2" [Number(1.2e2)]);
 
+  ("numbers", fun _ -> tokenised_eq "-23" [Minus; Number(23.)]);
+  ("numbers", fun _ -> tokenised_eq "-23e10" [Minus; Number(23e10)]);
+  ("numbers", fun _ -> tokenised_eq "-23.34" [Minus; Number(23.34)]);
+  ("numbers", fun _ -> tokenised_eq  "-23e-2" [Minus; Number(0.23)]);
+  ("numbers", fun _ -> tokenised_eq  "-123.0456789" [Minus; Number(123.0456789)]);
+  ("numbers", fun _ -> tokenised_eq  "-1.2e2" [Minus; Number(1.2e2)]);
+  
   ("single line comment", fun _ -> tokenised_eq  "//**hides in the comment again**" []);
   ("single line comment", fun _ -> tokenised_eq  "//*hides in the comment*\n;" [Semicolon]);
 
@@ -48,6 +55,6 @@ let () = test "Lexer" [
   ("string", fun _ -> tokenised_eq {|'\tst\rring\n\0'|} [Str("\tst\rring\n\0")] );
   ("string", fun _ -> tokenised_eq "\"st\nri\ng\"" [Str("st\nri\ng")] );
 
-  ("identifier", fun _ -> tokenised_eq "javascript > rust;" [Ident("javascript"); Greater; Ident("rust"); Semicolon]);
+  ("identifier", fun _ -> tokenised_eq "javascript > rust" [Ident("javascript"); Greater; Ident("rust")]);
 
 ]
