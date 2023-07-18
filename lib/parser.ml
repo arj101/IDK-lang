@@ -47,6 +47,21 @@ and class_decl tokens =
     | Ident name :: others -> (others, name)
     | others -> raise (UnexpectedSequence others)
   in
+
+  let rec parse_parents remaining_tokens acc =
+    match consume_newlines remaining_tokens with
+    | Ident name :: others -> parse_parents others (name :: acc)
+    | Comma :: others -> parse_parents others acc
+    | LeftBrace :: _ as others -> (others, acc)
+    | others -> raise (UnexpectedSequence others)
+  in
+
+  let remaining_tokens, parents =
+    match consume_newlines remaining_tokens with
+    | Extends :: others -> parse_parents others []
+    | others -> (others, [])
+  in
+
   match consume_newlines remaining_tokens with
   | LeftBrace :: others ->
       let rec get_functions tokens_remaining acc =
@@ -75,7 +90,7 @@ and class_decl tokens =
         | others -> raise (UnexpectedSequence others)
       in
       let remaining_toknes, fns = get_functions others [] in
-      (remaining_toknes, ClassDecl (ident, fns))
+      (remaining_toknes, ClassDecl (ident, parents, fns))
   | others -> raise (UnexpectedSequence others)
 
 and maybe_object tokens =
@@ -243,7 +258,14 @@ and fun_expr tokens =
   in
 
   let remaining_tokens, ident_list = args remaining_tokens [] in
-  let remaining_tokens, body_expr = expression remaining_tokens in
+  let remainign_tokens = consume_newlines remaining_tokens in
+
+  let remaining_tokens, body_expr =
+    match remaining_tokens with
+    | Colon :: others -> expression others
+    | LeftBrace :: others -> block_expr others
+    | others -> raise (UnexpectedSequence others)
+  in
 
   (remaining_tokens, Value (Fun (name_ident, List.rev ident_list, body_expr)))
 
@@ -356,13 +378,17 @@ and factor tokens =
   let rec factor_aux tokens_remaining acc prev_operator =
     let tokens_remaining, expr = unary tokens_remaining in
     match consume_newlines tokens_remaining with
-    | (Slash as operator) :: others | (Star as operator) :: others | (Percentage as operator) :: others ->
+    | (Slash as operator) :: others
+    | (Star as operator) :: others
+    | (Percentage as operator) :: others ->
         factor_aux others (Binary (acc, prev_operator, expr)) operator
     | others -> (others, Binary (acc, prev_operator, expr))
   in
   let tokens_remaining, leftmost_expr = unary tokens in
   match consume_newlines tokens_remaining with
-  | (Slash as operator) :: others | (Star as operator) :: others | (Percentage as operator) ::others ->
+  | (Slash as operator) :: others
+  | (Star as operator) :: others
+  | (Percentage as operator) :: others ->
       factor_aux others leftmost_expr operator
   | others -> (others, leftmost_expr)
 

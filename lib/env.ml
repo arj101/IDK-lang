@@ -18,7 +18,7 @@ type expr =
   | Locator of expr * expr
   | ObjectExpr of (ident, expr) Hashtbl.t
   | ArrayExpr of expr list
-  | ClassDecl of ident * expr list
+  | ClassDecl of ident * ident list * expr list
   | ClassInst of expr
   | This
 
@@ -41,7 +41,7 @@ and value =
 
 and literal = Num of float | Str of string | Bool of bool | Null
 and ident = string
-and virtuals = Class of ident * (string, value) Hashtbl.t
+and virtuals = Class of ident * ident list * (string, value) Hashtbl.t
 
 and env = {
   mutable scope : (string, value) Hashtbl.t;
@@ -55,6 +55,17 @@ and env = {
 (*Because with an ordinary env, expression evaluation can use values from parent environments*)
 let create_object_wrapper env =
   { scope = env.scope; virtuals = None; parent = None; this_ref = Some env }
+
+let wrap_hashtbl tbl =
+  { scope = tbl; virtuals = None; parent = None; this_ref = None }
+
+let compose child parent =
+  {
+    scope = child.scope;
+    virtuals = child.virtuals;
+    parent = Some parent;
+    this_ref = child.this_ref;
+  }
 
 let create_this_ref_wrapper env new_this =
   {

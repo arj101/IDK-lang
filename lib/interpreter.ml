@@ -74,7 +74,7 @@ and parse_num _ = function
 
 and typeof _ = function
   | Fun _ :: _ -> Literal (Str "function")
-  | Array _ :: _ -> Literal (Str "array" )
+  | Array _ :: _ -> Literal (Str "array")
   | Object _ :: _ -> Literal (Str "object")
   | ClosureFun _ :: _ -> Literal (Str "closure")
   | ExtFun _ :: _ -> Literal (Str "external_function")
@@ -177,16 +177,31 @@ and getenv _ = function
   | _ -> raise TypeError
 
 and array_length _ = function
-  | Array elts :: _ ->  Literal (Num (float_of_int (Array.length !elts)))
+  | Array elts :: _ -> Literal (Num (float_of_int (Array.length !elts)))
   | _ -> raise TypeError
 
 and string_to_ascii _ = function
-  | Literal (Str s) :: _ -> 
-      Array (ref (Array.of_seq (Seq.map (fun c -> Literal(Num (float_of_int(Char.code c)))) (String.to_seq s))))
+  | Literal (Str s) :: _ ->
+      Array
+        (ref
+           (Array.of_seq
+              (Seq.map
+                 (fun c -> Literal (Num (float_of_int (Char.code c))))
+                 (String.to_seq s))))
   | _ -> raise TypeError
 
 and ascii_to_string _ = function
-  | Array elts :: _ -> Literal (Str (String.of_seq (Array.to_seq (Array.map (fun e -> (match e with | Literal (Num n) -> Char.chr (int_of_float n) | _ -> raise TypeError)) !elts))))
+  | Array elts :: _ ->
+      Literal
+        (Str
+           (String.of_seq
+              (Array.to_seq
+                 (Array.map
+                    (fun e ->
+                      match e with
+                      | Literal (Num n) -> Char.chr (int_of_float n)
+                      | _ -> raise TypeError)
+                    !elts))))
   | _ -> raise TypeError
 
 (*external function definitions, loaded at startup*)
@@ -221,8 +236,8 @@ and def_ext_funs env =
   def_fn "exp" [ "num" ] exp;
   def_fn "sys_getenv" [ "name" ] getenv;
   def_fn "length" [ "array" ] array_length;
-  def_fn "stoa" ["string"] string_to_ascii;
-  def_fn "atos" ["ascii"] ascii_to_string;
+  def_fn "stoa" [ "string" ] string_to_ascii;
+  def_fn "atos" [ "ascii" ] ascii_to_string
 
 and def_consts env =
   let def_num name value = Env.define env name (Literal (Num value)) in
@@ -235,52 +250,54 @@ and def_consts env =
     (Array (ref (Array.map (fun v -> Literal (Str v)) Sys.argv)))
 
 and eval_expr env expr =
-  match expr with
-  | Value value -> eval_value env value
-  | StmtExpr stmt -> exec_stmt env stmt
-  | Block exprs -> eval_block env exprs
-  | Grouping expr -> eval_expr env expr
-  | If (cond, if_expr, else_expr) -> eval_if env cond if_expr else_expr
-  | Unary (op, expr) -> eval_unary env op expr
-  | Binary (expr_l, op, expr_r) -> eval_binary env expr_l op expr_r
-  | BlockReturn _ -> raise UnexpectedBlockReturn
-  | For (init, cond, update, body) -> eval_for env init cond update body
-  | While (cond, body) -> eval_while env cond body
-  | Call (call_expr, args) -> call env call_expr args
-  | Locator (lexpr, rexpr) -> locator env lexpr rexpr
-  | ObjectExpr fields -> object_expr env fields
-  | ArrayExpr exprs -> eval_array env exprs
-  | This -> Env.get (Option.get env.this_ref) "this"
-  | ClassDecl (name, methods) ->
-      Env.define_virtual env name
-        (Class
-           ( name,
-             let fields = Hashtbl.create (List.length methods) in
-             List.iter
-               (fun v ->
-                 match v with
-                 | Value (Fun (Some name, args, body)) ->
-                     Hashtbl.replace fields name
-                       (ClosureFun (env, Some name, args, body))
-                 | _ -> raise TypeError)
-               methods;
-             fields ));
-      Literal Null
-  | ClassInst expr -> class_inst env expr
+  debug_wrap_expr expr (fun expr ->
+      match expr with
+      | Value value -> eval_value env value
+      | StmtExpr stmt -> exec_stmt env stmt
+      | Block exprs -> eval_block env exprs
+      | Grouping expr -> eval_expr env expr
+      | If (cond, if_expr, else_expr) -> eval_if env cond if_expr else_expr
+      | Unary (op, expr) -> eval_unary env op expr
+      | Binary (expr_l, op, expr_r) -> eval_binary env expr_l op expr_r
+      | BlockReturn _ -> raise UnexpectedBlockReturn
+      | For (init, cond, update, body) -> eval_for env init cond update body
+      | While (cond, body) -> eval_while env cond body
+      | Call (call_expr, args) -> call env call_expr args
+      | Locator (lexpr, rexpr) -> locator env lexpr rexpr
+      | ObjectExpr fields -> object_expr env fields
+      | ArrayExpr exprs -> eval_array env exprs
+      | This -> Env.get (Option.get env.this_ref) "this"
+      | ClassDecl (name, parents, methods) ->
+          Env.define_virtual env name
+            (Class
+               ( name,
+                 parents,
+                 let fields = Hashtbl.create (List.length methods) in
+                 List.iter
+                   (fun v ->
+                     match v with
+                     | Value (Fun (Some name, args, body)) ->
+                         Hashtbl.replace fields name
+                           (ClosureFun (env, Some name, args, body))
+                     | _ -> raise TypeError)
+                   methods;
+                 fields ));
+          Literal Null
+      | ClassInst expr -> class_inst env expr)
 
 and class_inst env expr =
   match expr with
   | Call (Value (Variable class_name), args) -> (
       match Env.get_virtual env class_name with
-      | Class (_name, fns) ->
+      | Class (_name, _parents, fns) ->
           (* Printf.printf "found class %s\n" _name; *)
           (* Hashtbl.iter (fun k v -> Printf.printf "%s -> %s\n" k (string_of_value v)) fns; *)
           let this_val_env = Env.create (Some env) in
-          this_val_env.scope <-
-            Hashtbl.of_seq
-              (Seq.filter
-                 (fun (name, _) -> not (String.equal name class_name))
-                 (Hashtbl.to_seq fns));
+          (* this_val_env.scope <- *)
+          (*   Hashtbl.of_seq *)
+          (*     (Seq.filter *)
+          (*        (fun (name, _) -> not (String.equal name class_name)) *)
+          (*        (Hashtbl.to_seq fns)); *)
           Env.define this_val_env "this"
             (Object (Some class_name, this_val_env));
           this_val_env.this_ref <- Some this_val_env;
@@ -306,15 +323,14 @@ and class_inst env expr =
                         class_name))
           in
 
-          Hashtbl.iter
-            (fun fname f ->
-              match f with
-              | ClosureFun (env, name, params, body) ->
-                  Hashtbl.replace this_val_env.scope fname
-                    (ClosureFun (this_ref_env, name, params, body))
-              | _ -> ())
-            this_val_env.scope;
-
+          (* Hashtbl.iter *)
+          (*   (fun fname f -> *)
+          (*     match f with *)
+          (*     | ClosureFun (env, name, params, body) -> *)
+          (*         Hashtbl.replace this_val_env.scope fname *)
+          (*           (ClosureFun (this_ref_env, name, params, body)) *)
+          (*     | _ -> ()) *)
+          (*   this_val_env.scope; *)
           instance)
   | _ ->
       raise
@@ -348,6 +364,15 @@ and eval_fn_args env = function
           List.map (fun a -> Value (eval_expr env a)) args )
   | others -> others
 
+and debug_wrap_val value f =
+  try f value
+  with e ->
+    Printf.printf "Exception at %s\n" (string_of_value value);
+    raise e
+
+and debug_wrap_expr expr f =
+  f expr
+
 and locator env lexpr rexpr =
   let lvalue = eval_expr env lexpr in
   match lvalue with
@@ -364,7 +389,112 @@ and locator env lexpr rexpr =
       | Value v -> indexv v
       | _ -> raise (TypeErrorWithInfo "Arrays can only be indexed with numbers")
       )
-  | Object (_, fields) -> (
+  | Object (Some class_name, fields) -> (
+      match rexpr with
+      | Grouping expr ->
+          Env.get_field fields
+            (match try_to_str env (eval_expr env expr) with
+            | Literal (Str name) -> name
+            | _ ->
+                raise
+                  (TypeErrorWithInfo
+                     "dynamic '.' access can only return string type or types \
+                      that can be coerced to string"))
+      | Block expr_list ->
+          Env.get_field fields
+            (match try_to_str env (eval_block env expr_list) with
+            | Literal (Str name) -> name
+            | _ ->
+                raise
+                  (TypeErrorWithInfo
+                     "dynamic '.' access can only return string type or types \
+                      that can be coerced to string"))
+      | Value (Literal _) as expr ->
+          Env.get_field fields
+            (match try_to_str env (eval_expr env expr) with
+            | Literal (Str name) -> name
+            | _ ->
+                raise
+                  (TypeErrorWithInfo
+                     "dynamic '.' access can only return string type or types \
+                      that can be coerced to string"))
+      (*this branch should only need to evaluate function calls or variables*)
+      | Call _ as unevaled_expr ->
+          let expr = eval_fn_args env unevaled_expr in
+          let callee, args =
+            match eval_fn_args env expr with
+            | Call (callee, args) -> (callee, args)
+            | _ -> assert false
+          in
+          let transform_fn = function
+            | ClosureFun (env, name, params, body) ->
+                ClosureFun
+                  ( Env.create_this_ref_wrapper env (Some fields),
+                    name,
+                    params,
+                    body )
+            | Fun (name, params, body) -> assert false
+            | _ ->
+                raise (TypeErrorWithInfo "attempt to call a non-function value")
+          in
+
+          let rec find_fn class_name parents fns fn_name =
+            match Hashtbl.find_opt fns fn_name with
+            | Some fn -> Some fn
+            | None ->
+                let rec find_in_parents = function
+                  | parent_name :: others -> (
+                      match Env.get_virtual env parent_name with
+                      | Class (class_name, parents, fns) -> (
+                          match find_fn class_name parents fns fn_name with
+                          | Some fn_name -> Some fn_name
+                          | None -> find_in_parents others))
+                  | _ -> None
+                in
+                find_in_parents parents
+          in
+
+          let get_class_fn class_name fn_name =
+            if Option.is_some (Hashtbl.find_opt fields.scope fn_name) then
+              Hashtbl.find fields.scope fn_name
+            else
+              match Env.get_virtual env class_name with
+              | Class (class_name, parents, fns) -> (
+                  match find_fn class_name parents fns fn_name with
+                  | Some fn -> transform_fn fn
+                  | None ->
+                      raise
+                        (TypeErrorWithInfo
+                           (Printf.sprintf
+                              "No function named %s in class %s or its parents \
+                               [%s]"
+                              fn_name class_name
+                              (String.concat ", " parents))))
+          in
+
+          let rec transform_callee = function
+            | Call (callee, args) ->
+                call
+                  (Env.create_object_wrapper fields)
+                  (Value (transform_callee callee))
+                  args
+            | Value (Variable fn_name) -> get_class_fn class_name fn_name
+            | expr -> (
+                match eval_expr env expr with
+                | Literal (Str s) -> get_class_fn class_name s
+                | _ ->
+                    raise
+                      (TypeErrorWithInfo
+                         "every expression in locator statements must evaluate \
+                          to an identifier or a string"))
+          in
+          transform_callee expr
+      | expr ->
+          assert (
+            match expr with | Value (Variable _) -> true | _ -> false);
+          let expr = eval_fn_args env expr in
+          eval_expr (Env.create_object_wrapper fields) expr)
+  | Object (None, fields) -> (
       match rexpr with
       | Grouping expr ->
           Env.get_field fields

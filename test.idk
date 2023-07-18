@@ -1,19 +1,39 @@
-let a = [10,20,30,40]
-let b = [50,60 ,70, 80]
+class Point {
 
+	Point(x, y) {
+		this.x = x
+		this.y = y
+	}
 
-//[[10, 50], 10] -> [10, 50, 10]
-fun flatten(array) {
-    for let i = 0; i < length(array); i = i + 1 {
-        let newElt = [0, 0, 0]
-        newElt.0 = array.(i).(0).0
-        newElt.1 = array.(i).(0).1
-        newElt.2 = array.(i).1
-        array.(i) = newElt
-    }
-    array
+	fun length(): sqrt(pow(this.x, 2) + pow(this.y, 2))
+
+	fun distance(otherPt): sqrt(pow(this.x - otherPt.x, 2), pow(this.y - otherPt.y, 2))
+
 }
 
-println(flatten(a * b * a))
 
-println(stoa("Shiyad"))
+class AdvancedPoint extends Point {
+	AdvancedPoint(x, y) {
+		this.Point(x, y)
+	}
+
+	fun aVeryAdvancedFunction() {
+		this.x = this.x * (2 * random() - 1.0)
+		this.y = this.y * (2 * random() - 1.0)
+	}
+}
+
+let pt1 = new Point(3, 4)
+let apt = new AdvancedPoint(2, 3)
+
+pt1.length = fun (): pt1.x + pt1.y
+
+println(pt1.length())
+println(apt.length())
+
+println(stringify(pt1))
+println(stringify(apt))
+
+apt.aVeryAdvancedFunction()
+
+println(stringify(apt))

@@ -54,8 +54,9 @@ and string_of_expr (e : expr) =
             acc ^ Printf.sprintf "field( %s : %s )" k (string_of_expr v) ^ ", ")
           fields ""
       ^ " }"
-  | ClassDecl (name, fields) ->
-      Printf.sprintf "class %s { %s }" name
+  | ClassDecl (name, parents, fields) ->
+      Printf.sprintf "class %s [extends: %s] { %s }" name
+        (String.concat "," parents)
         (String.concat ", " (List.map string_of_expr fields))
   | ClassInst expr -> Printf.sprintf "new( %s )" (string_of_expr expr)
 

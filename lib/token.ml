@@ -43,6 +43,7 @@ type tokentype =
   | True
   | False
   | Return
+  | Extends
   | Null
   | And
   | Or
@@ -100,6 +101,7 @@ let string_of_tokentype (t : tokentype) : string =
   | True -> "true"
   | False -> "false"
   | Return -> "return"
+  | Extends -> "extends"
   | Null -> "null"
   | And -> "&&"
   | Or -> "||"

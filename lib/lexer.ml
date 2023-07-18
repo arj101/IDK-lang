@@ -5,7 +5,6 @@ exception UnexpectedCharacter of char
 exception UnexpectedEof
 exception Unimplemented of string
 exception ParsedVal
-
 exception AtEnd
 
 let tokenise (s : string) : tokentype list =
@@ -99,11 +98,11 @@ let tokenise (s : string) : tokentype list =
             match s.[!pos + 1] with
             | '/' ->
                 (try
-                while s.[!pos] != '\n' do
-                  incr pos;
-                  if is_at_end pos then raise AtEnd else ();
-                done;
-                with AtEnd -> ());
+                   while s.[!pos] != '\n' do
+                     incr pos;
+                     if is_at_end pos then raise AtEnd else ()
+                   done
+                 with AtEnd -> ());
                 incr pos;
                 incr line
             | '=' ->
@@ -122,15 +121,13 @@ let tokenise (s : string) : tokentype list =
       | '0' .. '9' ->
           (let len = ref 0 in
            let parse_num_sequence curr_len =
-             try 
-             while
-               (match s.[!pos] with '0' .. '9' -> true | _ -> false)
-             do
-               incr pos;
-               incr curr_len;
-               if is_at_end pos then raise AtEnd else ();
-             done
-             with AtEnd -> ();
+             try
+               while match s.[!pos] with '0' .. '9' -> true | _ -> false do
+                 incr pos;
+                 incr curr_len;
+                 if is_at_end pos then raise AtEnd else ()
+               done
+             with AtEnd -> ()
            in
            try
              parse_num_sequence len;
@@ -178,8 +175,9 @@ let tokenise (s : string) : tokentype list =
             then len
             else (
               incr pos;
-              if is_at_end pos then len+1 else  (*idk why this works*)
-              aux (len + 1))
+              if is_at_end pos then len + 1
+              else (*idk why this works*)
+                aux (len + 1))
           in
           let len = aux 0 in
           let sub_s = String.sub s (!pos - len) len in
@@ -202,6 +200,7 @@ let tokenise (s : string) : tokentype list =
           | "break" -> add_token Break
           | "new" -> add_token New
           | "class" -> add_token Class
+          | "extends" -> add_token Extends
           | _ as sub_s -> add_token (Ident sub_s))
       | c -> raise (UnexpectedCharacter c)
     done;
