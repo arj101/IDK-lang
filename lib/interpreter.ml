@@ -370,8 +370,7 @@ and debug_wrap_val value f =
     Printf.printf "Exception at %s\n" (string_of_value value);
     raise e
 
-and debug_wrap_expr expr f =
-  f expr
+and debug_wrap_expr expr f = f expr
 
 and locator env lexpr rexpr =
   let lvalue = eval_expr env lexpr in
@@ -490,8 +489,7 @@ and locator env lexpr rexpr =
           in
           transform_callee expr
       | expr ->
-          assert (
-            match expr with | Value (Variable _) -> true | _ -> false);
+          assert (match expr with Value (Variable _) -> true | _ -> false);
           let expr = eval_fn_args env expr in
           eval_expr (Env.create_object_wrapper fields) expr)
   | Object (None, fields) -> (

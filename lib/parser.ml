@@ -26,8 +26,10 @@ and expression tokens =
   match tokens with
   | Newline :: others -> expression others
   | Let :: others -> let_binding others
-  | Ident name :: Equal :: _ as tokens -> simple_assignment tokens
-  (* | Ident name :: _ as tokens -> assignment_or_topexpr tokens *)
+  (* | Ident name :: others ->  *)
+  (*     match consume_newlines others with *)
+  (*     | simple_assignment tokens *)
+  (* (* | Ident name :: _ as tokens -> assignment_or_topexpr tokens *) *)
   | Print :: others -> print others
   | Return :: others -> return others
   | Break :: others -> break others
@@ -125,6 +127,15 @@ and object_expr tokens =
   in
   aux_loop (Hashtbl.create 16) tokens
 
+and expand_shorthand_assign operator lexpr rexpr =
+  match operator with
+  | PlusEqual -> Binary (lexpr, Plus, rexpr)
+  | MinusEqual -> Binary (lexpr, Minus, rexpr)
+  | StarEqual -> Binary (lexpr, Star, rexpr)
+  | SlashEqual -> Binary (lexpr, Slash, rexpr)
+  | PercentageEqual -> Binary (lexpr, Percentage, rexpr)
+  | _ -> assert false
+
 and maybe_assignment tokens =
   try
     let remaining_tokens, lexpr = locator tokens in
@@ -132,6 +143,23 @@ and maybe_assignment tokens =
     | Equal :: others ->
         let remaining_tokens, rexpr = expression others in
         (remaining_tokens, StmtExpr (LocatorAssign (lexpr, rexpr)))
+    | (PlusEqual as op) :: others
+    | (MinusEqual as op) :: others
+    | (StarEqual as op) :: others
+    | (SlashEqual as op) :: others
+    | (PercentageEqual as op) :: others -> (
+        let remaining_tokens, rexpr = expression others in
+        match lexpr with
+        | Value (Variable name) ->
+            ( remaining_tokens,
+              StmtExpr (Assign (name, expand_shorthand_assign op lexpr rexpr))
+            )
+        | Locator _ ->
+            ( remaining_tokens,
+              StmtExpr
+                (LocatorAssign (lexpr, expand_shorthand_assign op lexpr rexpr))
+            )
+        | _ -> assert false)
     | others -> logic_or tokens (*expensive backtracking, idk how to fix this*)
   with UnexpectedSequence _ -> logic_or tokens
 
@@ -166,12 +194,6 @@ and let_binding tokens =
   in
   (remaining_tokens, StmtExpr (Decl (ident, value)))
 
-and simple_assignment tokens =
-  match tokens with
-  | Ident name :: Equal :: others ->
-      let remaining_tokens, expr = expression others in
-      (remaining_tokens, StmtExpr (Assign (name, expr)))
-  | others -> raise (UnexpectedSequence others)
 
 and for_expr tokens =
   let remaining_tokens, init_expr = expression tokens in
