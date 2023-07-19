@@ -547,8 +547,9 @@ and call parent_env call_expr args =
   match call_val with
   | Fun (name, params, body_expr) ->
       call_aux parent_env name args params body_expr
-  | ClosureFun (parent_env, name, params, body_expr) ->
-      call_aux parent_env name args params body_expr
+  | ClosureFun (closure_env, name, params, body_expr) ->
+      let args = List.map (fun a -> Value (eval_expr parent_env a)) args in
+      call_aux closure_env name args params body_expr
   | ExtFun (_, _, f) -> f parent_env (List.map (eval_expr parent_env) args)
   | _ -> raise TypeError
 
@@ -616,6 +617,8 @@ and add env lr =
   | Literal (Str s1), Literal (Str s2) ->
       Literal (Str (String.concat s1 [ ""; s2 ]))
   | Array a1, Array a2 -> Array (ref (Array.append !a1 !a2))
+  | Array a1, v -> Array (ref (Array.append !a1 (Array.of_list [v])))
+  | v, Array a2-> Array (ref (Array.append (Array.of_list [v]) !a2))
   | Literal (Bool b1), Literal (Bool b2) -> Literal (Bool (b1 || b2))
   | _ -> raise TypeError
 
@@ -751,7 +754,7 @@ and locator_assign env lexpr rexpr rrexpr =
   match lvalue with
   | Array array_ref -> (
       let indexv rexpr =
-        match rexpr with
+        match eval_value env rexpr with
         | Literal (Num n) ->
             Array.set !array_ref (int_of_float n) (eval_expr env rrexpr);
             Array.get !array_ref (int_of_float n)

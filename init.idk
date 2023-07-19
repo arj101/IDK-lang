@@ -33,28 +33,24 @@ class Array {
 
 
 	fun map(f) {
-		for let i = 0; i < length(this.values); i += 1 do
+		for let i = 0; i < length(this.values); i += 1 {
 			this.values.(i) = f(this.values.(i))
-
-		this
+		}
 	}
 
 	fun filter(f) {
 		let new_array = new Array()
 
-		for let i = 0; i < length(this.values); i += 1 do
+		for let i = 0; i < length(this.values); i += 1 {
 			if f(this.values.(i)) then
 				new_array.push(this.values.(i)) 
-
-		this.values = new_array.values
-		this
+		}
 	}
 
 	fun for_each(f):
 		for let i = 0; i < length(this.values); i += 1 {
 			f(this.values.(i))
 		}
-	
 
 	fun for_each_i(f): 
 		for let i = 0; i < length(this.values); i += 1 {
@@ -65,11 +61,6 @@ class Array {
 
 
 let a = new Array([1, 2, 3, 4, 56, 67, 7, 43, 124, 88 ,25 , 3467 ])
-.map(fun (x): 2 * x)
-.filter(fun (x): x % 2 == 0)
-
 
 println(stringify(a))
-
-
 
