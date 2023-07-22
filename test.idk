@@ -1,2 +1,17 @@
 
-println([2, 4, 5].length())
+let a = [-1]
+
+for let i = 0; i < 10; i += 1 do a.push(i)
+
+println(a)
+
+println(a.pop())
+
+println(a)
+
+println(a.shift())
+
+a.unshift(42)
+
+println(a)
+
