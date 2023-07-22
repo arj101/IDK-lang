@@ -4,6 +4,7 @@ open Parser
 open Int64
 open Env
 open Mtime_clock
+open LangCore
 
 exception FnReturn of value
 exception Break of value
@@ -28,6 +29,7 @@ let rec interpret expr =
   let env = Env.create None in
   def_ext_funs env;
   def_consts env;
+  Env.define env "Array" (gen_array_obj (Some env));
   Env.define env "globalThis" (Object (Some "GlobalEnvironment", env));
   try eval_expr env expr
   with FnReturn value ->
@@ -372,22 +374,60 @@ and debug_wrap_val value f =
 
 and debug_wrap_expr expr f = f expr
 
+and primitve_method env primitive rexpr =
+  let primitive_obj =
+    match primitive with
+    | Array _ -> "Array"
+    | Literal (Num _) -> "Number"
+    | Literal (Str _) -> "String"
+    | Literal (Bool _) -> "Boolean"
+    | Literal Null -> "Null"
+    | _ ->
+        raise
+          (TypeErrorWithInfo "primitve_method called on a non primitive type")
+  in
+  let primitive_fields = Env.get env primitive_obj in
+  let primitive_fields =
+    match primitive_fields with
+    | Object (_, fields) -> fields
+    | _ -> assert false
+  in
+  match eval_fn_args env rexpr with
+  | Call _ as callexpr ->
+      let rec transform_call = function
+        | Call ((Call _ as callee), args) ->
+            call env (Value (transform_call callee)) args
+        | Call (callee, args) -> (*innermost call*)
+            call env
+              (Value (transform_call callee))
+              (List.append [ Value primitive ] args) (*pass the primitive as an argument into the innermost call*)
+        | Value (Variable name) -> Env.get_field primitive_fields name
+        | expr -> (
+            match try_to_str env (eval_expr env expr) with
+            | Literal (Str name) -> Env.get_field primitive_fields name
+            | _ -> raise TypeError)
+      in
+      transform_call callexpr
+  | Value (Variable name) -> Env.get_field primitive_fields name
+  | expr -> (
+      match try_to_str env (eval_expr env expr) with
+      | Literal (Str name) -> Env.get_field primitive_fields name
+      | _ -> raise TypeError)
+
 and locator env lexpr rexpr =
   let lvalue = eval_expr env lexpr in
   match lvalue with
   | Array values -> (
       let indexv rexpr =
         match rexpr with
-        | Literal (Num n) -> Array.get !values (int_of_float n)
-        | _ ->
-            raise (TypeErrorWithInfo "Arrays can only be indexed with numbers")
+        | Value (Literal (Num n)) -> Array.get !values (int_of_float n)
+        | rexpr -> primitve_method env lvalue rexpr
       in
       match rexpr with
-      | Grouping expr -> indexv (eval_expr env expr)
-      | Block exprs -> indexv (eval_block env exprs)
-      | Value v -> indexv v
-      | _ -> raise (TypeErrorWithInfo "Arrays can only be indexed with numbers")
-      )
+      | Grouping expr -> indexv (Value (eval_expr env expr))
+      | Block exprs -> indexv (Value (eval_block env exprs))
+      | Value _ as v -> indexv v
+      | expr -> indexv expr)
   | Object (Some class_name, fields) -> (
       match rexpr with
       | Grouping expr ->
@@ -617,8 +657,8 @@ and add env lr =
   | Literal (Str s1), Literal (Str s2) ->
       Literal (Str (String.concat s1 [ ""; s2 ]))
   | Array a1, Array a2 -> Array (ref (Array.append !a1 !a2))
-  | Array a1, v -> Array (ref (Array.append !a1 (Array.of_list [v])))
-  | v, Array a2-> Array (ref (Array.append (Array.of_list [v]) !a2))
+  | Array a1, v -> Array (ref (Array.append !a1 (Array.of_list [ v ])))
+  | v, Array a2 -> Array (ref (Array.append (Array.of_list [ v ]) !a2))
   | Literal (Bool b1), Literal (Bool b2) -> Literal (Bool (b1 || b2))
   | _ -> raise TypeError
 
