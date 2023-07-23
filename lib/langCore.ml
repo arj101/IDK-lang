@@ -1,10 +1,12 @@
 open Env
-
-exception TypeError
+open Eval
+open Exceptions
 
 let array_length _ = function
   | Array elements :: _ -> Literal (Num (float_of_int (Array.length !elements)))
   | _ -> assert false
+
+let call_fn f args = Call (Value f, args)
 
 let array_push _ = function
   | Array elements :: elt :: _ ->
@@ -37,17 +39,95 @@ let array_pop _ = function
   | _ -> assert false
 
 let array_shift _ = function
-  | Array elements :: _ -> 
+  | Array elements :: _ ->
       let prev_len = Array.length !elements in
       let new_len = if prev_len > 0 then prev_len - 1 else prev_len in
       let first_element =
-        if prev_len > 0 then Array.get !elements 0
-        else Literal Null
+        if prev_len > 0 then Array.get !elements 0 else Literal Null
       in
       elements := Array.sub !elements 0 new_len;
       first_element
   | _ -> assert false
 
+let array_map env = function
+  | Array elements :: fn :: _ ->
+      let new_elements =
+        Array.map
+          (fun v -> eval_expr env (Call (Value fn, [ Value v ])))
+          !elements
+      in
+      Array (ref new_elements)
+  | _ -> raise TypeError
+
+let array_filter env = function
+  | Array elements :: fn :: _ ->
+      let new_elements =
+        Array.of_list
+          (List.filter
+             (fun v ->
+               to_bool env (eval_expr env (Call (Value fn, [ Value v ]))))
+             (Array.to_list !elements))
+      in
+      Array (ref new_elements)
+  | _ -> raise TypeError
+
+let array_foldl env = function
+  | Array elements :: fn :: init :: _ ->
+      let new_elements =
+        Array.fold_left
+          (fun acc v -> eval_expr env (call_fn fn [ Value acc; Value v ]))
+          init !elements
+      in
+      new_elements
+  | [ Array elements; fn ] ->
+      let new_elements =
+        Array.fold_left
+          (fun acc v -> eval_expr env (call_fn fn [ Value acc; Value v ]))
+          (Literal Null) !elements
+      in
+      new_elements
+  | _ -> raise TypeError
+
+let array_foldr env = function
+  | Array elements :: fn :: init :: _ ->
+      let new_elements =
+        Array.fold_right
+          (fun v acc -> eval_expr env (call_fn fn [ Value v; Value acc ]))
+          !elements init
+      in
+      new_elements
+  | [ Array elements; fn ] ->
+      let new_elements =
+        Array.fold_right
+          (fun acc v -> eval_expr env (call_fn fn [ Value v; Value acc ]))
+          !elements (Literal Null)
+      in
+      new_elements
+  | _ -> raise TypeError
+
+let array_slice _ = function
+  | Array elements :: Literal (Num start) :: Literal (Num end_exc) :: _ ->
+      let end_exc =
+        if end_exc >= float_of_int (Array.length !elements) then
+          float_of_int (Array.length !elements) -. 1.
+        else end_exc
+      in
+      let new_elements =
+        Array.sub !elements
+          (int_of_float (Float.round start))
+          (int_of_float (Float.round (end_exc -. start)))
+      in
+      Array (ref new_elements)
+  | [Array elements; Literal (Num start)] ->
+      let end_exc = float_of_int (Array.length !elements) in
+      let start = if start < 0. then end_exc +. start else start in
+      let new_elements =
+        Array.sub !elements
+          (int_of_float (Float.round start))
+          (int_of_float (Float.round (end_exc -. start)))
+      in
+      Array (ref new_elements)
+  | _ -> raise TypeError
 
 let gen_array_obj parent_env : value =
   let env = Env.create parent_env in
@@ -58,6 +138,12 @@ let gen_array_obj parent_env : value =
   def_fn "push" [ "array" ] array_push;
   def_fn "pop" [ "array" ] array_pop;
   def_fn "shift" [ "array" ] array_shift;
-  def_fn "unshift" [ "unshift" ] array_unshift;
+  def_fn "unshift" [ "array" ] array_unshift;
+
+  def_fn "map" [ "array" ] array_map;
+  def_fn "filter" [ "array" ] array_filter;
+  def_fn "foldl" [ "array"; "fn_acc_v"; "init" ] array_foldl;
+  def_fn "foldr" [ "array"; "fn_v_acc"; "init" ] array_foldr;
+  def_fn "slice" [ "array"; "start"; "end_exclusive" ] array_slice;
 
   array_obj

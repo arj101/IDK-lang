@@ -1,17 +1,9 @@
-
 let a = [-1]
 
 for let i = 0; i < 10; i += 1 do a.push(i)
 
 println(a)
 
-println(a.pop())
-
-println(a)
-
-println(a.shift())
-
-a.unshift(42)
-
-println(a)
-
+println(a.slice(-2))
+println(a.slice(2, 4))
+println(a.slice(2))

@@ -140,9 +140,14 @@ and maybe_assignment tokens =
   try
     let remaining_tokens, lexpr = locator tokens in
     match remaining_tokens with
-    | Equal :: others ->
+    | Equal :: others -> (
         let remaining_tokens, rexpr = expression others in
-        (remaining_tokens, StmtExpr (LocatorAssign (lexpr, rexpr)))
+        match lexpr with
+        | Value (Variable name) ->
+            (remaining_tokens, StmtExpr (Assign (name, rexpr)))
+        | Locator _ ->
+            (remaining_tokens, StmtExpr (LocatorAssign (lexpr, rexpr)))
+        | _ -> assert false)
     | (PlusEqual as op) :: others
     | (MinusEqual as op) :: others
     | (StarEqual as op) :: others
@@ -193,7 +198,6 @@ and let_binding tokens =
     | others -> raise (UnexpectedSequence others)
   in
   (remaining_tokens, StmtExpr (Decl (ident, value)))
-
 
 and for_expr tokens =
   let remaining_tokens, init_expr = expression tokens in
