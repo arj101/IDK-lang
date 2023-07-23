@@ -206,6 +206,36 @@ let array_init env = function
                   (call_fn init_fn [ Value (Literal (Num (float_of_int i))) ]))))
   | _ -> raise TypeError
 
+let array_foreach env = function
+  | Array elements :: fn :: _ ->
+      Array.iter
+        (fun v -> eval_expr env (call_fn fn [ Value v ]) |> ignore)
+        !elements;
+      Literal Null
+  | _ -> raise TypeError
+
+let array_indexof env = function
+  | Array elements :: value :: _ ->
+      let array_length = Array.length !elements in
+      let rec find i =
+        if i < array_length then
+          if to_bool env (eq env (!elements.(i), value)) then i else find (i + 1)
+        else -1
+      in
+      Literal (Num (float_of_int (find 0)))
+  | _ -> raise TypeError
+
+let array_find env = function
+  | Array elements :: finder_fn :: _ -> (
+      match
+        Array.find_opt
+          (fun v -> to_bool env (eval_expr env (call_fn finder_fn [ Value v ])))
+          !elements
+      with
+      | Some value -> value
+      | None -> Literal Null)
+  | _ -> raise TypeError
+
 let gen_array_obj parent_env : value =
   let env = Env.create parent_env in
   let array_obj = Object (Some "Array", env) in
@@ -227,5 +257,10 @@ let gen_array_obj parent_env : value =
 
   def_fn "make" [ "length"; "init" ] array_make;
   def_fn "init" [ "length"; "init_fn" ] array_init;
+
+  def_fn "for_each" [ "array"; "iter_fn" ] array_foreach;
+
+  def_fn "index_of" [ "array"; "value" ] array_indexof;
+  def_fn "find" [ "array"; "finder_fn" ] array_find;
 
   array_obj

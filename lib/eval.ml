@@ -465,6 +465,8 @@ and eq env = function
   | Literal (Bool b1), Literal (Bool b2) -> Literal (Bool (b1 == b2))
   | Literal (Str s1), Literal (Str s2) -> Literal (Bool (String.equal s1 s2))
   | Literal Null, Literal Null -> Literal (Bool true)
+  | Array a1, Array a2 -> Literal (Bool (!a1 == !a2))
+  | Object(_, e1), Object(_, e2) -> Literal (Bool (e1 == e2))
   | _ -> Literal (Bool false)
 
 and neq env = function

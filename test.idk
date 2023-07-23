@@ -1,4 +1,6 @@
 
-println([2, 3, 4, 5].flat_map(
-     fun (v): if v % 2 == 0 then Array.make(v, "e") else v
-))
+let arr = Array.init(8, fun (i): i * (if random() > 0.5 then 2 else 7))
+
+println(arr)
+
+println(arr.find(fun (v): v % 2 == 1))
