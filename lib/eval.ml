@@ -380,7 +380,7 @@ and eval_binary env expr_l op expr_r =
   let r = eval_value env (eval_expr env expr_r) in
   let lr = (l, r) in
 
-  match op with
+  match op.t with
   | Token.Plus -> add env lr
   | Token.Minus -> sub env lr
   | Token.Star -> mult env lr
@@ -483,7 +483,7 @@ and modulo env = function
   | _ -> raise TypeError
 
 and eval_unary env operator expr =
-  match operator with
+  match operator.t with
   | Token.Bang -> Literal (Bool (not (to_bool env (eval_expr env expr))))
   | Token.Minus -> (
       match try_to_num env (eval_expr env expr) with

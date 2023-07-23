@@ -38,7 +38,7 @@ let eval source print_ast =
     ()
   with UnexpectedSequence tokens ->
     print_string "Unexpected sequence: \n";
-    print_string (String.concat " " (List.map string_of_tokentype tokens))
+    print_string (String.concat " " (List.map string_of_token tokens))
 
 let eval_source path =
   let source, _ = read_to_string path in

@@ -7,14 +7,14 @@ exception Unimplemented of string
 exception ParsedVal
 exception AtEnd
 
-let tokenise (s : string) : tokentype list =
+let tokenise (s : string) : token list =
   let line = ref 0 in
   let pos = ref 0 in
   let tokens = ref [] in
 
   let add_token t =
     incr pos;
-    tokens := !tokens @ [ t ]
+    tokens := !tokens @ [ {t; line= !line; col=(!pos, !pos) } ]
   in
 
   let match_next x =

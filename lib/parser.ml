@@ -4,17 +4,18 @@ open Env
 
 exception UnexpectedToken of tokentype
 exception UnexpectedEof
-exception UnexpectedSequence of tokentype list
+exception UnexpectedSequence of token list
 exception UnexpectedSyntaxTree
 exception UnexpectedSyntaxTreeWithInfo of string
 
 let identity tokens = (tokens, Value (Literal Null))
 
-let rec parse (tokens : tokentype list) : expr =
+let rec parse (tokens : token list) : expr =
   let rec parse_aux tokens_remaining expr_accum =
     match tokens_remaining with
     | [] -> expr_accum (*ignore newlines and semicolons*)
-    | Newline :: others | Semicolon :: others -> parse_aux others expr_accum
+    | { t = Newline } :: others | { t = Semicolon } :: others ->
+        parse_aux others expr_accum
     | tokens ->
         let tokens_remaining, expr = expression tokens_remaining in
         parse_aux tokens_remaining (expr :: expr_accum)
@@ -24,51 +25,51 @@ let rec parse (tokens : tokentype list) : expr =
 
 and expression tokens =
   match tokens with
-  | Newline :: others -> expression others
-  | Let :: others -> let_binding others
+  | { t = Newline } :: others -> expression others
+  | { t = Let } :: others -> let_binding others
   (* | Ident name :: others ->  *)
   (*     match consume_newlines others with *)
   (*     | simple_assignment tokens *)
   (* (* | Ident name :: _ as tokens -> assignment_or_topexpr tokens *) *)
-  | Print :: others -> print others
-  | Return :: others -> return others
-  | Break :: others -> break others
-  | If :: others -> if_expr others
-  | Fun :: others -> fun_expr others
-  | While :: others ->
+  | { t = Print } :: others -> print others
+  | { t = Return } :: others -> return others
+  | { t = Break } :: others -> break others
+  | { t = If } :: others -> if_expr others
+  | { t = Fun } :: others -> fun_expr others
+  | { t = While } :: others ->
       while_expr others
       (* | LeftBrace :: others -> maybe_object others *)
       (*BOTH objects and scopes have high precedence because they can be used with other operators*)
-  | For :: others -> for_expr others
-  | Class :: others -> class_decl others
+  | { t = For } :: others -> for_expr others
+  | { t = Class } :: others -> class_decl others
   | others -> maybe_assignment others
 
 and class_decl tokens =
   let remaining_tokens, ident =
     match tokens with
-    | Ident name :: others -> (others, name)
+    | { t = Ident name } :: others -> (others, name)
     | others -> raise (UnexpectedSequence others)
   in
 
   let rec parse_parents remaining_tokens acc =
     match consume_newlines remaining_tokens with
-    | Ident name :: others -> parse_parents others (name :: acc)
-    | Comma :: others -> parse_parents others acc
-    | LeftBrace :: _ as others -> (others, acc)
+    | { t = Ident name } :: others -> parse_parents others (name :: acc)
+    | { t = Comma } :: others -> parse_parents others acc
+    | { t = LeftBrace } :: _ as others -> (others, acc)
     | others -> raise (UnexpectedSequence others)
   in
 
   let remaining_tokens, parents =
     match consume_newlines remaining_tokens with
-    | Extends :: others -> parse_parents others []
+    | { t = Extends } :: others -> parse_parents others []
     | others -> (others, [])
   in
 
   match consume_newlines remaining_tokens with
-  | LeftBrace :: others ->
+  | { t = LeftBrace } :: others ->
       let rec get_functions tokens_remaining acc =
         match consume_newlines tokens_remaining with
-        | Ident name :: others as tokens ->
+        | { t = Ident name } :: others as tokens ->
             if String.equal name ident then
               let tokens_remaining, expr = fun_expr tokens in
               get_functions tokens_remaining (List.append acc [ expr ])
@@ -76,7 +77,7 @@ and class_decl tokens =
               print_string
                 "Only constructors can be declared without 'fun' keyword\n";
               raise (UnexpectedSequence tokens))
-        | Fun :: others ->
+        | { t = Fun } :: others ->
             let tokens_remaining, expr = fun_expr others in
             (match expr with
             | Value (Fun (Some name, _, _)) ->
@@ -88,7 +89,7 @@ and class_decl tokens =
                 else ()
             | _ -> assert false);
             get_functions tokens_remaining (List.append acc [ expr ])
-        | RightBrace :: others -> (others, acc)
+        | { t = RightBrace } :: others -> (others, acc)
         | others -> raise (UnexpectedSequence others)
       in
       let remaining_toknes, fns = get_functions others [] in
@@ -98,49 +99,54 @@ and class_decl tokens =
 and maybe_object tokens =
   let remaining_tokens = consume_newlines tokens in
   match remaining_tokens with
-  | Ident name :: others | Str name :: others -> (
+  | { t = Ident name } :: others | { t = Str name } :: others -> (
       match consume_newlines others with
-      | Colon :: others -> object_expr tokens
+      | { t = Colon } :: others -> object_expr tokens
       | _ -> block_expr tokens)
-  | RightBrace :: _ -> object_expr tokens
+  | { t = RightBrace } :: _ -> object_expr tokens
   | _ -> block_expr tokens
 
 and object_expr tokens =
   let rec consume_comma = function
-    | Newline :: others -> consume_comma others
-    | Comma :: others -> others
+    | { t = Newline } :: others -> consume_comma others
+    | { t = Comma } :: others -> others
     | others -> others
   in
 
   let rec aux_loop acc remaining_tokens =
     match consume_newlines remaining_tokens with
-    | Ident name :: others | Str name :: others -> (
+    | { t = Ident name } :: others | { t = Str name } :: others -> (
         match consume_newlines others with
-        | Colon :: others ->
+        | { t = Colon } :: others ->
             let remaining_tokens, rexpr = expression others in
             let remaining_tokens = consume_comma remaining_tokens in
             Hashtbl.replace acc name rexpr;
             aux_loop acc remaining_tokens
         | others -> raise (UnexpectedSequence others))
-    | RightBrace :: others -> (others, ObjectExpr acc)
+    | { t = RightBrace } :: others -> (others, ObjectExpr acc)
     | others -> raise (UnexpectedSequence others)
   in
   aux_loop (Hashtbl.create 16) tokens
 
 and expand_shorthand_assign operator lexpr rexpr =
   match operator with
-  | PlusEqual -> Binary (lexpr, Plus, rexpr)
-  | MinusEqual -> Binary (lexpr, Minus, rexpr)
-  | StarEqual -> Binary (lexpr, Star, rexpr)
-  | SlashEqual -> Binary (lexpr, Slash, rexpr)
-  | PercentageEqual -> Binary (lexpr, Percentage, rexpr)
+  | { t = PlusEqual } as op ->
+      Binary (lexpr, { t = Plus; line = op.line; col = op.col }, rexpr)
+  | { t = MinusEqual } as op ->
+      Binary (lexpr, { t = Minus; line = op.line; col = op.col }, rexpr)
+  | { t = StarEqual } as op ->
+      Binary (lexpr, { t = Star; line = op.line; col = op.col }, rexpr)
+  | { t = SlashEqual } as op ->
+      Binary (lexpr, { t = Slash; line = op.line; col = op.col }, rexpr)
+  | { t = PercentageEqual } as op ->
+      Binary (lexpr, { t = Percentage; line = op.line; col = op.col }, rexpr)
   | _ -> assert false
 
 and maybe_assignment tokens =
   try
     let remaining_tokens, lexpr = locator tokens in
     match remaining_tokens with
-    | Equal :: others -> (
+    | { t = Equal } :: others -> (
         let remaining_tokens, rexpr = expression others in
         match lexpr with
         | Value (Variable name) ->
@@ -148,11 +154,11 @@ and maybe_assignment tokens =
         | Locator _ ->
             (remaining_tokens, StmtExpr (LocatorAssign (lexpr, rexpr)))
         | _ -> assert false)
-    | (PlusEqual as op) :: others
-    | (MinusEqual as op) :: others
-    | (StarEqual as op) :: others
-    | (SlashEqual as op) :: others
-    | (PercentageEqual as op) :: others -> (
+    | ({ t = PlusEqual } as op) :: others
+    | ({ t = MinusEqual } as op) :: others
+    | ({ t = StarEqual } as op) :: others
+    | ({ t = SlashEqual } as op) :: others
+    | ({ t = PercentageEqual } as op) :: others -> (
         let remaining_tokens, rexpr = expression others in
         match lexpr with
         | Value (Variable name) ->
@@ -169,22 +175,22 @@ and maybe_assignment tokens =
   with UnexpectedSequence _ -> logic_or tokens
 
 and consume_newlines = function
-  | Newline :: others -> consume_newlines others
+  | { t = Newline } :: others -> consume_newlines others
   | others -> others
 
 and let_binding tokens =
   let remaining_tokens, ident, value =
     match tokens with
     (*let [name] = expression*)
-    | Ident name :: others ->
+    | { t = Ident name } :: others ->
         let rec let_eq = function
           (*ignore newlines*)
-          | Newline :: others -> let_eq others
+          | { t = Newline } :: others -> let_eq others
           (*let name [=]  expression*)
-          | Equal :: others ->
+          | { t = Equal } :: others ->
               let rec let_expr = function
                 (*ignore newlines*)
-                | Newline :: others -> let_expr others
+                | { t = Newline } :: others -> let_expr others
                 (*let name = [expression]*)
                 | tokens ->
                     let remaining_tokens, value = expression tokens in
@@ -204,7 +210,7 @@ and for_expr tokens =
 
   let remaining_tokens =
     match remaining_tokens with
-    | Semicolon :: others -> others
+    | { t = Semicolon } :: others -> others
     | others -> others
   in
 
@@ -212,7 +218,7 @@ and for_expr tokens =
 
   let remaining_tokens =
     match remaining_tokens with
-    | Semicolon :: others -> others
+    | { t = Semicolon } :: others -> others
     | others -> others
   in
 
@@ -220,12 +226,14 @@ and for_expr tokens =
 
   let remaining_tokens =
     match remaining_tokens with
-    | Semicolon :: others -> others
+    | { t = Semicolon } :: others -> others
     | others -> others
   in
 
   let remaining_tokens =
-    match remaining_tokens with Do :: others -> others | others -> others
+    match remaining_tokens with
+    | { t = Do } :: others -> others
+    | others -> others
   in
 
   let remaining_tokens, body_expr = expression remaining_tokens in
@@ -247,14 +255,16 @@ and break tokens =
 and if_expr tokens =
   let remaining_tokens, cond_expr = expression tokens in
   let remaining_tokens =
-    match remaining_tokens with Then :: others -> others | others -> others
+    match remaining_tokens with
+    | { t = Then } :: others -> others
+    | others -> others
   in
   let remaining_tokens, if_expr = expression remaining_tokens in
 
   let rec else_expr remaining_tokens =
     match remaining_tokens with
-    | Newline :: others -> else_expr others
-    | Else :: others ->
+    | { t = Newline } :: others -> else_expr others
+    | { t = Else } :: others ->
         let remaining_tokens, else_expr = expression others in
         (remaining_tokens, If (cond_expr, if_expr, Some else_expr))
     | others -> (others, If (cond_expr, if_expr, None))
@@ -265,31 +275,31 @@ and if_expr tokens =
 and fun_expr tokens =
   let remaining_tokens, name_ident =
     match tokens with
-    | Ident name :: others -> (others, Some name)
+    | { t = Ident name } :: others -> (others, Some name)
     | others -> (others, None)
   in
 
   let remaining_tokens =
     match remaining_tokens with
-    | LeftParen :: others -> others
+    | { t = LeftParen } :: others -> others
     | others -> raise (UnexpectedSequence others)
   in
 
   let rec args remaining_tokens acc =
     match remaining_tokens with
-    | Newline :: others | Comma :: others -> args others acc
-    | RightParen :: others -> (others, acc)
-    | Ident name :: others -> args others (name :: acc)
+    | { t = Newline } :: others | { t = Comma } :: others -> args others acc
+    | { t = RightParen } :: others -> (others, acc)
+    | { t = Ident name } :: others -> args others (name :: acc)
     | others -> raise (UnexpectedSequence others)
   in
 
   let remaining_tokens, ident_list = args remaining_tokens [] in
-  let remainign_tokens = consume_newlines remaining_tokens in
+  let remaining_tokens = consume_newlines remaining_tokens in
 
   let remaining_tokens, body_expr =
     match remaining_tokens with
-    | Colon :: others -> expression others
-    | LeftBrace :: others -> block_expr others
+    | { t = Colon } :: others -> expression others
+    | { t = LeftBrace } :: others -> block_expr others
     | others -> raise (UnexpectedSequence others)
   in
 
@@ -299,7 +309,9 @@ and while_expr tokens =
   let remaining_tokens, cond_expr = expression tokens in
 
   let remaining_tokens =
-    match remaining_tokens with Do :: others -> others | others -> others
+    match remaining_tokens with
+    | { t = Do } :: others -> others
+    | others -> others
   in
 
   let remaining_tokens, loop_expr = expression remaining_tokens in
@@ -309,8 +321,9 @@ and block_expr tokens =
   let rec block_aux tokens_remaining acc =
     match tokens_remaining with
     | [] -> raise UnexpectedEof
-    | Newline :: others | Semicolon :: others -> block_aux others acc
-    | RightBrace :: others -> (others, acc)
+    | { t = Newline } :: others | { t = Semicolon } :: others ->
+        block_aux others acc
+    | { t = RightBrace } :: others -> (others, acc)
     | others ->
         let tokens_remaining, expr = expression others in
         block_aux tokens_remaining (expr :: acc)
@@ -325,44 +338,48 @@ and block_expr tokens =
 
 and ignore_newlines (tokens, expr) =
   match tokens with
-  | Newline :: others -> (others, expr)
+  | { t = Newline } :: others -> (others, expr)
   | others -> (others, expr)
 
 and logic_or tokens =
-  let rec or_aux tokens_remaining acc =
+  let rec or_aux tokens_remaining acc prev_op =
     let tokens_remaining, expr = logic_and tokens_remaining in
     match consume_newlines tokens_remaining with
-    | Or :: others -> or_aux others (Binary (acc, Or, expr))
-    | others -> (others, Binary (acc, Or, expr))
+    | ({ t = Or } as operator) :: others ->
+        or_aux others (Binary (acc, prev_op, expr)) operator
+    | others -> (others, Binary (acc, prev_op, expr))
   in
   let remaining_tokens, leftmost_expr = logic_and tokens in
   match consume_newlines remaining_tokens with
-  | Or :: others -> or_aux others leftmost_expr
+  | ({ t = Or } as operator) :: others -> or_aux others leftmost_expr operator
   | others -> (others, leftmost_expr)
 
 and logic_and tokens =
-  let rec and_aux tokens_remaining acc =
+  let rec and_aux tokens_remaining acc prev_op =
     let tokens_remaining, expr = equality tokens_remaining in
     match consume_newlines tokens_remaining with
-    | And :: others -> and_aux others (Binary (acc, And, expr))
-    | others -> (others, Binary (acc, And, expr))
+    | ({ t = And } as op) :: others ->
+        and_aux others (Binary (acc, prev_op, expr)) op
+    | others -> (others, Binary (acc, prev_op, expr))
   in
   let remaining_tokens, leftmost_expr = equality tokens in
   match consume_newlines remaining_tokens with
-  | And :: others -> and_aux others leftmost_expr
+  | ({ t = And } as op) :: others -> and_aux others leftmost_expr op
   | others -> (others, leftmost_expr)
 
 and equality tokens =
   let rec eq_aux tokens_remaining acc prev_operator =
     let tokens_remaining, expr = comparison tokens_remaining in
     match consume_newlines tokens_remaining with
-    | (BangEqual as operator) :: others | (EqualEqual as operator) :: others ->
+    | ({ t = BangEqual } as operator) :: others
+    | ({ t = EqualEqual } as operator) :: others ->
         eq_aux others (Binary (acc, prev_operator, expr)) operator
     | others -> (others, Binary (acc, prev_operator, expr))
   in
   let remaining_tokens, leftmost_expr = comparison tokens in
   match consume_newlines remaining_tokens with
-  | (BangEqual as operator) :: others | (EqualEqual as operator) :: others ->
+  | ({ t = BangEqual } as operator) :: others
+  | ({ t = EqualEqual } as operator) :: others ->
       eq_aux others leftmost_expr operator
   | others -> (others, leftmost_expr)
 
@@ -370,19 +387,19 @@ and comparison tokens =
   let rec cmp_aux tokens_remaining acc prev_operator =
     let tokens_remaining, expr = term tokens_remaining in
     match consume_newlines tokens_remaining with
-    | (Less as operator) :: others
-    | (LessEqual as operator) :: others
-    | (Greater as operator) :: others
-    | (GreaterEqual as operator) :: others ->
-        cmp_aux others (Binary (acc, prev_operator, expr)) operator
+    | ({ t = Less } as op) :: others
+    | ({ t = LessEqual } as op) :: others
+    | ({ t = Greater } as op) :: others
+    | ({ t = GreaterEqual } as op) :: others ->
+        cmp_aux others (Binary (acc, prev_operator, expr)) op
     | others -> (others, Binary (acc, prev_operator, expr))
   in
   let remaining_tokens, leftmost_expr = term tokens in
   match consume_newlines remaining_tokens with
-  | (Less as operator) :: others
-  | (LessEqual as operator) :: others
-  | (Greater as operator) :: others
-  | (GreaterEqual as operator) :: others ->
+  | ({ t = Less } as operator) :: others
+  | ({ t = LessEqual } as operator) :: others
+  | ({ t = Greater } as operator) :: others
+  | ({ t = GreaterEqual } as operator) :: others ->
       cmp_aux others leftmost_expr operator
   | others -> (others, leftmost_expr)
 
@@ -390,13 +407,15 @@ and term tokens =
   let rec term_aux tokens_remaining acc prev_operator =
     let tokens_remaining, expr = factor tokens_remaining in
     match consume_newlines tokens_remaining with
-    | (Minus as operator) :: others | (Plus as operator) :: others ->
+    | ({ t = Minus } as operator) :: others
+    | ({ t = Plus } as operator) :: others ->
         term_aux others (Binary (acc, prev_operator, expr)) operator
     | others -> (others, Binary (acc, prev_operator, expr))
   in
   let tokens_remaining, leftmost_expr = factor tokens in
   match consume_newlines tokens_remaining with
-  | (Minus as operator) :: others | (Plus as operator) :: others ->
+  | ({ t = Minus } as operator) :: others | ({ t = Plus } as operator) :: others
+    ->
       term_aux others leftmost_expr operator
   | others -> (others, leftmost_expr)
 
@@ -404,24 +423,25 @@ and factor tokens =
   let rec factor_aux tokens_remaining acc prev_operator =
     let tokens_remaining, expr = unary tokens_remaining in
     match consume_newlines tokens_remaining with
-    | (Slash as operator) :: others
-    | (Star as operator) :: others
-    | (Percentage as operator) :: others ->
+    | ({ t = Slash } as operator) :: others
+    | ({ t = Star } as operator) :: others
+    | ({ t = Percentage } as operator) :: others ->
         factor_aux others (Binary (acc, prev_operator, expr)) operator
     | others -> (others, Binary (acc, prev_operator, expr))
   in
   let tokens_remaining, leftmost_expr = unary tokens in
   match consume_newlines tokens_remaining with
-  | (Slash as operator) :: others
-  | (Star as operator) :: others
-  | (Percentage as operator) :: others ->
+  | ({ t = Slash } as operator) :: others
+  | ({ t = Star } as operator) :: others
+  | ({ t = Percentage } as operator) :: others ->
       factor_aux others leftmost_expr operator
   | others -> (others, leftmost_expr)
 
 and unary tokens =
   match tokens with
-  | Newline :: others -> unary others
-  | (Bang as operator) :: others | (Minus as operator) :: others ->
+  | { t = Newline } :: others -> unary others
+  | ({ t = Bang } as operator) :: others | ({ t = Minus } as operator) :: others
+    ->
       let tokens_remaining, expr = unary others in
       (tokens_remaining, Unary (operator, expr))
   | others -> locator others
@@ -432,24 +452,24 @@ and locator tokens =
       maybe_call (consume_newlines remaining_tokens)
     in
     match consume_newlines remaining_tokens with
-    | Dot :: others -> locator_aux others (Locator (acc, middle_expr))
+    | { t = Dot } :: others -> locator_aux others (Locator (acc, middle_expr))
     | others -> (others, Locator (acc, middle_expr))
   in
 
   let remaining_tokens, leftmost_expr = maybe_call tokens in
   let remaining_tokens = consume_newlines remaining_tokens in
   match remaining_tokens with
-  | Dot :: others -> locator_aux others leftmost_expr
+  | { t = Dot } :: others -> locator_aux others leftmost_expr
   | others -> (others, leftmost_expr)
 
 and maybe_call tokens =
   let remaining_tokens, expr = primary tokens in
   let remaining_tokens, rexpr =
     match consume_newlines remaining_tokens with
-    | LeftParen :: others ->
+    | { t = LeftParen } :: others ->
         let rec call remaining_tokens prev_expr =
           match consume_newlines remaining_tokens with
-          | LeftParen :: others ->
+          | { t = LeftParen } :: others ->
               let remaining_tokens, expr_list = call_args others in
               call remaining_tokens (Call (prev_expr, expr_list))
           | others -> (remaining_tokens, prev_expr)
@@ -467,8 +487,8 @@ and maybe_call tokens =
 and call_args tokens =
   let rec args_aux remaining_tokens acc =
     match remaining_tokens with
-    | Newline :: others | Comma :: others -> args_aux others acc
-    | RightParen :: others -> (others, acc)
+    | { t = Newline } :: others | { t = Comma } :: others -> args_aux others acc
+    | { t = RightParen } :: others -> (others, acc)
     | others ->
         let remaining_tokens, expr = expression others in
         args_aux remaining_tokens (expr :: acc)
@@ -478,20 +498,21 @@ and call_args tokens =
 
 and primary tokens =
   match tokens with
-  | Newline :: others -> primary others
-  | LeftParen :: others -> grouping others
-  | LeftBrace :: others -> maybe_object others
-  | True :: others -> (others, Value (Literal (Bool true)))
-  | False :: others -> (others, Value (Literal (Bool false)))
-  | Null :: others -> (others, Value (Literal Null))
-  | Number n :: others | Plus :: Number n :: others ->
+  | { t = Newline } :: others -> primary others
+  | { t = LeftParen } :: others -> grouping others
+  | { t = LeftBrace } :: others -> maybe_object others
+  | { t = True } :: others -> (others, Value (Literal (Bool true)))
+  | { t = False } :: others -> (others, Value (Literal (Bool false)))
+  | { t = Null } :: others -> (others, Value (Literal Null))
+  | { t = Number n } :: others | { t = Plus } :: { t = Number n } :: others ->
       (others, Value (Literal (Num n)))
-  | Minus :: Number n :: others -> (others, Value (Literal (Num (n *. -1.0))))
-  | Str s :: others -> (others, Value (Literal (Str s)))
-  | Ident name :: others -> (others, Value (Variable name))
-  | LeftSquareBrace :: others -> array others
-  | New :: others -> class_instantiate others
-  | This :: others -> (others, This)
+  | { t = Minus } :: { t = Number n } :: others ->
+      (others, Value (Literal (Num (n *. -1.0))))
+  | { t = Str s } :: others -> (others, Value (Literal (Str s)))
+  | { t = Ident name } :: others -> (others, Value (Variable name))
+  | { t = LeftSquareBrace } :: others -> array others
+  | { t = New } :: others -> class_instantiate others
+  | { t = This } :: others -> (others, This)
   | others -> raise (UnexpectedSequence others)
 
 and class_instantiate tokens =
@@ -500,13 +521,13 @@ and class_instantiate tokens =
 
 and array tokens =
   let rec consume_comma = function
-    | Newline :: others -> consume_comma others
-    | Comma :: others -> others
+    | { t = Newline } :: others -> consume_comma others
+    | { t = Comma } :: others -> others
     | others -> others
   in
   let rec array_aux acc remaining_tokens =
     match consume_newlines remaining_tokens with
-    | RightSquareBrace :: others -> (others, ArrayExpr acc)
+    | { t = RightSquareBrace } :: others -> (others, ArrayExpr acc)
     | others ->
         let remaining_tokens, expr = expression others in
         let remaining_tokens = consume_comma remaining_tokens in
@@ -517,5 +538,5 @@ and array tokens =
 and grouping tokens =
   let remaining_tokens, expr = expression tokens in
   match remaining_tokens with
-  | RightParen :: others -> (others, Grouping expr)
+  | { t = RightParen } :: others -> (others, Grouping expr)
   | others -> raise (UnexpectedSequence others)

@@ -54,6 +54,13 @@ type tokentype =
   | New
   | Class
 
+type token =
+  {
+    t: tokentype;
+    line: int;
+    col: (int * int);
+  }
+
 let string_of_tokentype (t : tokentype) : string =
   match t with
   | LeftParen -> "LeftParen"
@@ -111,4 +118,4 @@ let string_of_tokentype (t : tokentype) : string =
   | Break -> "break"
   | Colon -> ":"
 
-type token = { t_type : tokentype; lexeme : string; line : int }
+let string_of_token { t; _} = string_of_tokentype t
