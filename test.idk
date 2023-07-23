@@ -1,9 +1,13 @@
-let a = [-1]
 
-for let i = 0; i < 10; i += 1 do a.push(i)
+let arr1 = [0, 1, 2, [3, 4]];
 
-println(a)
+println(arr1.flatten());
 
-println(a.slice(-2))
-println(a.slice(2, 4))
-println(a.slice(2))
+let arr2 = [0, 1, 2, [[[3, 4]]]];
+
+println(arr2.flatten(2))
+
+let arr3 = [[[[[0]]]], [1, 2] [2] [4] [[[3, 4]]]];
+
+println(arr3.flatten(2))
+println(arr3.flatten(5))
