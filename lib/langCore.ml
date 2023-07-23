@@ -188,6 +188,23 @@ let array_flatmap env args =
   | Array elements :: fn :: _ -> Array (ref (flatmap_aux fn !elements))
   | _ -> raise TypeError
 
+let array_make _ = function
+  | Literal (Num length) :: initial_value :: _ ->
+      Array (ref (Array.make (int_of_float length) initial_value))
+  | [ Literal (Num length) ] ->
+      Array (ref (Array.make (int_of_float length) (Literal Null)))
+  | [] -> Array (ref [||])
+  | _ -> raise TypeError
+
+let array_init env = function
+  | Literal (Num length) :: init_fn :: _ ->
+      Array
+        (ref
+           (Array.init (int_of_float length) (fun i ->
+                eval_expr env
+                  (call_fn init_fn [ Value (Literal (Num (float_of_int i))) ]))))
+  | _ -> raise TypeError
+
 let gen_array_obj parent_env : value =
   let env = Env.create parent_env in
   let array_obj = Object (Some "Array", env) in
@@ -206,5 +223,8 @@ let gen_array_obj parent_env : value =
   def_fn "slice" [ "array"; "start"; "end_exclusive" ] array_slice;
   def_fn "flat" [ "array" ] array_flat;
   def_fn "flat_map" [ "array" ] array_flatmap;
+
+  def_fn "make" [ "length"; "init" ] array_make;
+  def_fn "init" [ "length"; "init_fn" ] array_init;
 
   array_obj

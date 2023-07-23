@@ -23,15 +23,17 @@ exception Unimplemented of string
 exception ParsedVal
 exception ParseResult of expr
 
-let eval source =
+let eval source print_ast =
   let chars = Lexer.tokenise source in
   (* let s = String.concat " " (List.map string_of_tokentype chars) in *)
   (* print_string s; *)
   (* print_string "\n\n"; *)
   try
     let parse_result = parse chars in
-    (* print_string (string_of_expr parse_result); *)
-    (* print_string "\n\nExecuting...\n\n"; *)
+    if print_ast then (
+      print_string (string_of_expr parse_result);
+      print_string "\n\nExecuting...\n\n")
+    else ();
     let _ = Interpreter.interpret parse_result in
     ()
   with UnexpectedSequence tokens ->
@@ -49,4 +51,13 @@ let eval_stdin _ =
   eval (eval_stdin_aux "")
 
 let () =
-  if Array.length Sys.argv >= 2 then eval_source Sys.argv.(1) else eval_stdin ()
+  let print_ast =
+    if
+      List.length
+        (List.filter (fun s -> String.equal s "-ast") (Array.to_list Sys.argv))
+      > 0
+    then true
+    else false
+  in
+  if Array.length Sys.argv >= 2 then eval_source Sys.argv.(1) print_ast
+  else eval_stdin () print_ast

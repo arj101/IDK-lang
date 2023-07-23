@@ -1,8 +1,4 @@
 
 println([0, 1, 2, 3, 4, 5].flat_map(
-     fun (v) {
-        let a = []
-        for let i = 1; i < v; i += 1 do a.push(i)
-        a
-     }
+     fun (v): Array.init(v, fun (i): i*2) + "4"
 ))

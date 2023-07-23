@@ -127,7 +127,7 @@ and val_to_string (v : value) =
           if String.ends_with s ~suffix:"." then
             String.sub s 0 (String.length s - 1)
           else s
-      | Str s -> s
+      | Str s -> "\"" ^ s ^ "\""
       | Bool b -> string_of_bool b
       | Null -> "null")
 
