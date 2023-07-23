@@ -1,13 +1,8 @@
 
-let arr1 = [0, 1, 2, [3, 4]];
-
-println(arr1.flatten());
-
-let arr2 = [0, 1, 2, [[[3, 4]]]];
-
-println(arr2.flatten(2))
-
-let arr3 = [[[[[0]]]], [1, 2] [2] [4] [[[3, 4]]]];
-
-println(arr3.flatten(2))
-println(arr3.flatten(5))
+println([0, 1, 2, 3, 4, 5].flat_map(
+     fun (v) {
+        let a = []
+        for let i = 1; i < v; i += 1 do a.push(i)
+        a
+     }
+))

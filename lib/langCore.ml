@@ -129,7 +129,7 @@ let array_slice _ = function
       Array (ref new_elements)
   | _ -> raise TypeError
 
-let array_flatten _ args =
+let array_flat _ args =
   let rec flatten_aux depth a =
     if depth < 0 then a
     else
@@ -160,6 +160,34 @@ let array_flatten _ args =
   | Array elements :: _ -> Array (ref (flatten_aux 0 !elements))
   | _ -> raise TypeError
 
+let array_flatmap env args =
+  let rec flatmap_aux map_fn a =
+    let rec flatmap_aux_aux a acc subi_start subi_curr =
+      if Array.length a > subi_curr then
+        match
+          eval_expr env (call_fn map_fn [ Value (Array.get a subi_curr) ])
+        with
+        | Array suba ->
+            flatmap_aux_aux a
+              (Array.concat
+                 [
+                   acc;
+                   Array.sub a subi_start
+                     (Int.max (subi_curr - subi_start - 1) 0);
+                   !suba;
+                 ])
+              (subi_curr + 1) (subi_curr + 1)
+        | elem -> flatmap_aux_aux a acc subi_start (subi_curr + 1)
+      else
+        Array.concat
+          [ acc; Array.sub a subi_start (Array.length a - subi_start) ]
+    in
+    flatmap_aux_aux a [||] 0 0
+  in
+  match args with
+  | Array elements :: fn :: _ -> Array (ref (flatmap_aux fn !elements))
+  | _ -> raise TypeError
+
 let gen_array_obj parent_env : value =
   let env = Env.create parent_env in
   let array_obj = Object (Some "Array", env) in
@@ -176,6 +204,7 @@ let gen_array_obj parent_env : value =
   def_fn "foldl" [ "array"; "fn_acc_v"; "init" ] array_foldl;
   def_fn "foldr" [ "array"; "fn_v_acc"; "init" ] array_foldr;
   def_fn "slice" [ "array"; "start"; "end_exclusive" ] array_slice;
-  def_fn "flatten" [ "array" ] array_flatten;
+  def_fn "flat" [ "array" ] array_flat;
+  def_fn "flat_map" [ "array" ] array_flatmap;
 
   array_obj
