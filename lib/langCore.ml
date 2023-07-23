@@ -177,10 +177,11 @@ let array_flatmap env args =
                    !suba;
                  ])
               (subi_curr + 1) (subi_curr + 1)
-        | elem -> flatmap_aux_aux a acc subi_start (subi_curr + 1)
-      else
-        Array.concat
-          [ acc; Array.sub a subi_start (Array.length a - subi_start) ]
+        | elem ->
+            flatmap_aux_aux a
+              (Array.append acc [| elem |])
+              subi_start (subi_curr + 1)
+      else acc
     in
     flatmap_aux_aux a [||] 0 0
   in
