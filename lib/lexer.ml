@@ -10,11 +10,13 @@ exception AtEnd
 let tokenise (s : string) : token list =
   let line = ref 0 in
   let pos = ref 0 in
+  let col = ref 0 in
   let tokens = ref [] in
 
   let add_token t =
     incr pos;
-    tokens := !tokens @ [ {t; line= !line; col=(!pos, !pos) } ]
+    incr col;
+    tokens := !tokens @ [ {t; line= !line; col=(!col, !col) } ]
   in
 
   let match_next x =
@@ -114,6 +116,7 @@ let tokenise (s : string) : token list =
       | ':' -> add_token Colon
       | '\n' ->
           incr line;
+          col := 0;
           add_token Newline
       | '\r' | '\t' | ' ' -> incr pos
       | '"' -> add_token (Str (parse_string '"'))
