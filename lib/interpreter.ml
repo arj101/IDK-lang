@@ -113,10 +113,6 @@ and getenv _ = function
         | _ -> Null)
   | _ -> raise TypeError
 
-and array_length _ = function
-  | Array elts :: _ -> Literal (Num (float_of_int (Array.length !elts)))
-  | _ -> raise TypeError
-
 and string_to_ascii _ = function
   | Literal (Str s) :: _ ->
       Array
@@ -158,7 +154,6 @@ and def_ext_funs env =
   def_fn "JSON_dot_stringify" [ "object" ] object_to_string;
   def_fn "stringify" [ "object" ] object_to_string;
   def_fn "sys_getenv" [ "name" ] getenv;
-  def_fn "length" [ "array" ] array_length;
   def_fn "stoa" [ "string" ] string_to_ascii;
   def_fn "atos" [ "ascii" ] ascii_to_string
 
