@@ -8,6 +8,8 @@ open Idk.Token
 open Idk.Parser
 open Mtime
 open Mtime_clock
+open AnsiFormatter
+open Printf
 
 let read_to_string path =
   let ic = open_in path in
@@ -22,13 +24,35 @@ exception Unimplemented of string
 exception ParsedVal
 exception ParseResult of expr
 
-let rec report_line file_name lines line_number start_idx =
-  let line_num_str = string_of_int line_number in
+let rec report_error file_name lines (error : parse_error) =
+  let line_number = error.token.span.line
+  and start_idx = error.token.span.col in
+  let line_num_str = string_of_int (line_number + 1) in
   let line_num_len = String.length line_num_str in
-  Printf.printf "-> %s\n" file_name;
-  Printf.printf " %s|\n" (String.make line_num_len ' ');
-  Printf.printf " %s| %s\n" line_num_str (List.nth lines line_number);
-  Printf.printf " %s| %s^%s\n" (String.make line_num_len ' ') (String.make start_idx ' ') (String.make (((List.nth lines line_number) |> String.length)-start_idx) '^')
+
+  print_string "-> ";
+  Printf.sprintf "%s\n" file_name |> print_styled [ fg_color Cyan ];
+  print_styled [ text_format Bold; fg_color Red ] "error: ";
+  Printf.sprintf "%s\n" error.info |> print_styled [ text_format Bold ];
+
+  print_endline
+    (Printf.sprintf " %s|" (String.make line_num_len ' ')
+    |> styled [ fg_color Cyan ]);
+  Printf.printf "%s %s\n"
+    (Printf.sprintf " %s|" line_num_str |> styled [ fg_color Cyan ])
+    (List.nth lines line_number);
+  Printf.printf "%s %s%s\n"
+    (Printf.sprintf " %s|" (String.make line_num_len ' ')
+    |> styled [ fg_color Cyan ])
+    (String.make (start_idx - 1) ' ')
+    (String.make (Token.token_length error.token) '^' |> styled [ fg_color Red ])
+
+let rec report_errors source_name lines (errors : parse_error list) =
+  List.iter
+    (fun e ->
+      report_error source_name lines e;
+      print_newline ())
+    errors
 
 and eval source_filename source print_ast =
   let lines = String.split_on_char '\n' source in
@@ -36,20 +60,15 @@ and eval source_filename source print_ast =
   (* let s = String.concat " " (List.map string_of_tokentype chars) in *)
   (* print_string s; *)
   (* print_string "\n\n"; *)
-  try
-    let parse_result = parse tokens in
-    if print_ast then (
-      print_string (string_of_expr parse_result);
-      print_string "\n\nExecuting...\n\n")
-    else ();
-    let _ = Interpreter.interpret parse_result in
-    ()
-  with UnexpectedSequence tokens ->
-    print_string "Unexpected sequence: \n";
-    let line_number, error_start  =
-      match tokens with token :: _ -> (token.line, match token.col with | (start, _) -> start) | _ -> (List.length lines, 0)
-    in
-    report_line source_filename lines line_number error_start
+  match parse tokens with
+  | Ok parse_result ->
+      if print_ast then (
+        print_string (string_of_expr parse_result);
+        print_string "\n\nExecuting...\n\n")
+      else ();
+      let _ = Interpreter.interpret parse_result in
+      ()
+  | Error errors -> report_errors source_filename lines errors
 (* print_string (String.concat " " (List.map string_of_token tokens)) *)
 
 and eval_source path =

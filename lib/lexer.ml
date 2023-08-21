@@ -14,9 +14,11 @@ let tokenise (s : string) : token list =
   let tokens = ref [] in
 
   let add_token t =
+    tokens :=
+      !tokens
+      @ [ { t; span = { pos = !pos; line = !line; col = !col } } ];
+    col := !col + token_type_length t;
     incr pos;
-    incr col;
-    tokens := !tokens @ [ {t; line= !line; col=(!col, !col) } ]
   in
 
   let match_next x =
@@ -118,7 +120,8 @@ let tokenise (s : string) : token list =
           incr line;
           col := 0;
           add_token Newline
-      | '\r' | '\t' | ' ' -> incr pos
+      | ' ' | '\t'  -> incr col; incr pos
+      | '\r'  -> incr pos 
       | '"' -> add_token (Str (parse_string '"'))
       | '\'' -> add_token (Str (parse_string '\''))
       | '0' .. '9' ->

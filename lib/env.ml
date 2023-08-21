@@ -7,8 +7,8 @@ type expr =
   | If of expr * expr * expr option
   | While of expr * expr
   | For of expr * expr * expr * expr
-  | Binary of expr * token* expr
-  | Unary of token* expr
+  | Binary of expr * token * expr
+  | Unary of token * expr
   | Block of expr list
   | Grouping of expr
   | Call of expr * expr list

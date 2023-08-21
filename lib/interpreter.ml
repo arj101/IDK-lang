@@ -83,7 +83,7 @@ and eval env = function
       | Literal (Str s) -> (
           try
             let tokens = Lexer.tokenise s in
-            let ast = Parser.parse tokens in
+            let ast = Result.get_ok (Parser.parse tokens) in
             eval_expr env ast
           with _ -> Literal Null)
       | _ -> Literal Null)
@@ -240,4 +240,3 @@ and def_consts env =
 
   Env.define env "sys_argv"
     (Array (ref (Array.map (fun v -> Literal (Str v)) Sys.argv)))
-

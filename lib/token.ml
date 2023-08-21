@@ -54,12 +54,8 @@ type tokentype =
   | New
   | Class
 
-type token =
-  {
-    t: tokentype;
-    line: int;
-    col: (int * int);
-  }
+type span = { pos : int; line : int; col : int }
+type token = { t : tokentype; span : span }
 
 let string_of_tokentype (t : tokentype) : string =
   match t with
@@ -118,4 +114,22 @@ let string_of_tokentype (t : tokentype) : string =
   | Break -> "break"
   | Colon -> ":"
 
-let string_of_token { t; _} = string_of_tokentype t
+let token_type_length t =
+  match t with
+  | Ident name -> String.length name
+  | Str s -> String.length s + 2
+  | Number n ->
+      string_of_float n |> String.length (*FIXME: figure out the actual length*)
+  | Fun | This | If | Else | While | Do | For | Let | Class | New | Print | True
+  | False | Return | Extends | Null | And | Or | Then | Break ->
+      string_of_tokentype t |> String.length
+  | GreaterEqual | PlusEqual | LessEqual | EqualEqual | PercentageEqual
+  | StarStar | BangEqual | SlashEqual ->
+      2
+  | t -> 1
+
+let token_length { t; _ } = token_type_length t
+let string_of_token { t; _ } = string_of_tokentype t
+
+
+let string_of_token_list tokens = String.concat ", " (List.map string_of_token tokens) 

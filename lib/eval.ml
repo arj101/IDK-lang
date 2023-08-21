@@ -151,10 +151,12 @@ and primitve_method env primitive rexpr =
       let rec transform_call = function
         | Call ((Call _ as callee), args) ->
             call env (Value (transform_call callee)) args
-        | Call (callee, args) -> (*innermost call*)
+        | Call (callee, args) ->
+            (*innermost call*)
             call env
               (Value (transform_call callee))
-              (List.append [ Value primitive ] args) (*pass the primitive as an argument into the innermost call*)
+              (List.append [ Value primitive ] args)
+            (*pass the primitive as an argument into the innermost call*)
         | Value (Variable name) -> Env.get_field primitive_fields name
         | expr -> (
             match try_to_str env (eval_expr env expr) with
@@ -466,7 +468,7 @@ and eq env = function
   | Literal (Str s1), Literal (Str s2) -> Literal (Bool (String.equal s1 s2))
   | Literal Null, Literal Null -> Literal (Bool true)
   | Array a1, Array a2 -> Literal (Bool (!a1 == !a2))
-  | Object(_, e1), Object(_, e2) -> Literal (Bool (e1 == e2))
+  | Object (_, e1), Object (_, e2) -> Literal (Bool (e1 == e2))
   | _ -> Literal (Bool false)
 
 and neq env = function

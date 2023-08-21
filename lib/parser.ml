@@ -2,26 +2,109 @@ open Token
 open Ast
 open Env
 
-exception UnexpectedToken of tokentype
+exception UnexpectedToken of tokentype * token list
 exception UnexpectedEof
 exception UnexpectedSequence of token list
 exception UnexpectedSyntaxTree
 exception UnexpectedSyntaxTreeWithInfo of string
 
+type line_number = int
+and row_pos = int
+and src_pos = line_number * row_pos
+
+type span_start = src_pos
+and span_end = src_pos
+and span = span_start * span_end
+
+type parse_error = {
+  token : token;
+  info : string;
+  remaining_tokens : token list;
+}
+
+type info = string
+
+exception ParseError of parse_error
+exception EofParseError of info
+exception BlockParseError of parse_error list * token list
+exception IrrecoverableError
+
 let identity tokens = (tokens, Value (Literal Null))
 
-let rec parse (tokens : token list) : expr =
-  let rec parse_aux tokens_remaining expr_accum =
+let rec parse (tokens : token list) : (expr, parse_error list) result =
+  let rec parse_aux tokens_remaining expr_accum
+      (errors_accum : parse_error list) =
     match tokens_remaining with
-    | [] -> expr_accum (*ignore newlines and semicolons*)
+    | [] -> (expr_accum, errors_accum)
     | { t = Newline } :: others | { t = Semicolon } :: others ->
-        parse_aux others expr_accum
-    | tokens ->
-        let tokens_remaining, expr = expression tokens_remaining in
-        parse_aux tokens_remaining (expr :: expr_accum)
+        parse_aux others expr_accum errors_accum
+    | tokens -> (
+        let state =
+          try
+            let tokens_remaining, expr = expression tokens_remaining in
+            Ok (tokens_remaining, expr)
+            (* parse_aux tokens_remaining (expr :: expr_accum) errors_accum *)
+          with
+          | ParseError err -> (
+              match recover_from_unexpected_sequence err.remaining_tokens with
+              | errors, Ok (tokens, expr) ->
+                  Error
+                    (parse_aux tokens (expr :: expr_accum)
+                       (List.append errors (err :: errors_accum)))
+              | _ -> Error (expr_accum, err :: errors_accum))
+          | BlockParseError (errors, remaining_tokens) -> (
+              match recover_from_unexpected_sequence remaining_tokens with
+              | recovery_errors, Ok (tokens, expr) ->
+                  Error
+                    (parse_aux tokens (expr :: expr_accum)
+                       (List.concat [ recovery_errors; errors; errors_accum ]))
+              | _ -> Error (expr_accum, List.append errors errors_accum))
+        in
+
+        match state with
+        | Ok (tokens, expr) ->
+            parse_aux tokens (expr :: expr_accum) errors_accum
+        | Error t -> t)
   in
-  let exprs = parse_aux tokens [] in
-  Block (List.rev exprs)
+
+  let exprs, errors = parse_aux tokens [] [] in
+  if List.length errors > 0 then Error (List.rev errors)
+  else Ok (Block (List.rev exprs))
+
+and recover_from_unexpected_sequence_aux = function
+  | { t = Let } :: others -> Ok (let_binding others)
+  | { t = Return } :: others -> Ok (let_binding others)
+  | { t = Break } :: others -> Ok (break others)
+  | { t = If } :: others -> Ok (if_expr others)
+  | { t = Fun } :: others -> Ok (fun_expr others)
+  | { t = While } :: others -> Ok (while_expr others)
+  | { t = For } :: others -> Ok (for_expr others)
+  | { t = Class } :: others -> Ok (class_decl others)
+  | t :: others ->
+      recover_from_unexpected_sequence_aux others
+  | [] -> Error ()
+
+and recover_from_unexpected_sequence tokens =
+  let rec aux error_accum tokens =
+    try
+      ( error_accum,
+        Result.map_error
+          (fun _ -> error_accum)
+          (recover_from_unexpected_sequence_aux tokens) )
+    with
+    | ParseError err -> aux (err :: error_accum) err.remaining_tokens
+    | BlockParseError (err, remaining_tokens) ->
+        aux (List.append err error_accum) remaining_tokens
+  in
+  aux [] tokens
+
+and parse_error info token_sequence =
+  match token_sequence with
+  | [] -> EofParseError info
+  | token :: others -> ParseError { token; remaining_tokens = others; info }
+
+and default_parse_error token_sequence =
+  parse_error "Unexpected token" token_sequence
 
 and expression tokens =
   match tokens with
@@ -48,7 +131,7 @@ and class_decl tokens =
   let remaining_tokens, ident =
     match tokens with
     | { t = Ident name } :: others -> (others, name)
-    | others -> raise (UnexpectedSequence others)
+    | others -> raise (parse_error "Expected identifier" others)
   in
 
   let rec parse_parents remaining_tokens acc =
@@ -56,7 +139,7 @@ and class_decl tokens =
     | { t = Ident name } :: others -> parse_parents others (name :: acc)
     | { t = Comma } :: others -> parse_parents others acc
     | { t = LeftBrace } :: _ as others -> (others, acc)
-    | others -> raise (UnexpectedSequence others)
+    | others -> raise (parse_error "Unexpected token" others)
   in
 
   let remaining_tokens, parents =
@@ -90,11 +173,11 @@ and class_decl tokens =
             | _ -> assert false);
             get_functions tokens_remaining (List.append acc [ expr ])
         | { t = RightBrace } :: others -> (others, acc)
-        | others -> raise (UnexpectedSequence others)
+        | others -> raise (default_parse_error others)
       in
       let remaining_toknes, fns = get_functions others [] in
       (remaining_toknes, ClassDecl (ident, parents, fns))
-  | others -> raise (UnexpectedSequence others)
+  | others -> raise (default_parse_error others)
 
 and maybe_object tokens =
   let remaining_tokens = consume_newlines tokens in
@@ -122,24 +205,28 @@ and object_expr tokens =
             let remaining_tokens = consume_comma remaining_tokens in
             Hashtbl.replace acc name rexpr;
             aux_loop acc remaining_tokens
-        | others -> raise (UnexpectedSequence others))
+        | others ->
+            raise
+              (parse_error "Expected ':' after field name in object expression"
+                 others))
     | { t = RightBrace } :: others -> (others, ObjectExpr acc)
-    | others -> raise (UnexpectedSequence others)
+    | others ->
+        raise
+          (parse_error
+             "Expected an object field identifier (either an identifier or a \
+              string)"
+             others)
   in
   aux_loop (Hashtbl.create 16) tokens
 
 and expand_shorthand_assign operator lexpr rexpr =
   match operator with
-  | { t = PlusEqual } as op ->
-      Binary (lexpr, { t = Plus; line = op.line; col = op.col }, rexpr)
-  | { t = MinusEqual } as op ->
-      Binary (lexpr, { t = Minus; line = op.line; col = op.col }, rexpr)
-  | { t = StarEqual } as op ->
-      Binary (lexpr, { t = Star; line = op.line; col = op.col }, rexpr)
-  | { t = SlashEqual } as op ->
-      Binary (lexpr, { t = Slash; line = op.line; col = op.col }, rexpr)
-  | { t = PercentageEqual } as op ->
-      Binary (lexpr, { t = Percentage; line = op.line; col = op.col }, rexpr)
+  | { t = PlusEqual; span } -> Binary (lexpr, { t = Plus; span }, rexpr)
+  | { t = MinusEqual; span } -> Binary (lexpr, { t = Minus; span }, rexpr)
+  | { t = StarEqual; span } -> Binary (lexpr, { t = Star; span }, rexpr)
+  | { t = SlashEqual; span } -> Binary (lexpr, { t = Slash; span }, rexpr)
+  | { t = PercentageEqual; span } ->
+      Binary (lexpr, { t = Percentage; span }, rexpr)
   | _ -> assert false
 
 and maybe_assignment tokens =
@@ -201,7 +288,7 @@ and let_binding tokens =
           | others -> (others, name, Value (Literal Null))
         in
         let_eq others
-    | others -> raise (UnexpectedSequence others)
+    | others -> raise (parse_error "Expected an identifier" others)
   in
   (remaining_tokens, StmtExpr (Decl (ident, value)))
 
@@ -282,7 +369,7 @@ and fun_expr tokens =
   let remaining_tokens =
     match remaining_tokens with
     | { t = LeftParen } :: others -> others
-    | others -> raise (UnexpectedSequence others)
+    | others -> raise (parse_error "Expected '('" others)
   in
 
   let rec args remaining_tokens acc =
@@ -290,7 +377,8 @@ and fun_expr tokens =
     | { t = Newline } :: others | { t = Comma } :: others -> args others acc
     | { t = RightParen } :: others -> (others, acc)
     | { t = Ident name } :: others -> args others (name :: acc)
-    | others -> raise (UnexpectedSequence others)
+    | others ->
+        raise (parse_error "Unexpected token in function arguments" others)
   in
 
   let remaining_tokens, ident_list = args remaining_tokens [] in
@@ -300,7 +388,7 @@ and fun_expr tokens =
     match remaining_tokens with
     | { t = Colon } :: others -> expression others
     | { t = LeftBrace } :: others -> block_expr others
-    | others -> raise (UnexpectedSequence others)
+    | others -> raise (parse_error "Expected either a ':' or '{'" others)
   in
 
   (remaining_tokens, Value (Fun (name_ident, List.rev ident_list, body_expr)))
@@ -318,23 +406,41 @@ and while_expr tokens =
   (remaining_tokens, While (cond_expr, loop_expr))
 
 and block_expr tokens =
-  let rec block_aux tokens_remaining acc =
+  let rec block_aux tokens_remaining expr_accum errors_accum =
     match tokens_remaining with
     | [] -> raise UnexpectedEof
     | { t = Newline } :: others | { t = Semicolon } :: others ->
-        block_aux others acc
-    | { t = RightBrace } :: others -> (others, acc)
-    | others ->
-        let tokens_remaining, expr = expression others in
-        block_aux tokens_remaining (expr :: acc)
+        block_aux others expr_accum errors_accum
+    | { t = RightBrace } :: others -> (others, expr_accum, errors_accum)
+    | tokens -> (
+        try
+          let tokens_remaining, expr = expression tokens_remaining in
+          block_aux tokens_remaining (expr :: expr_accum) errors_accum
+        with
+        | ParseError err -> (
+            match recover_from_unexpected_sequence err.remaining_tokens with
+            | errors, Ok (tokens, expr) ->
+                block_aux tokens (expr :: expr_accum)
+                  (List.append errors (err :: errors_accum))
+            | _ -> (err.remaining_tokens, expr_accum, err :: errors_accum))
+        | BlockParseError (errors, remaining_tokens) -> (
+            match recover_from_unexpected_sequence remaining_tokens with
+            | recovery_errors, Ok (tokens, expr) ->
+                block_aux tokens (expr :: expr_accum)
+                  (List.concat [ recovery_errors; errors; errors_accum ])
+            | _ ->
+                (remaining_tokens, expr_accum, List.append errors errors_accum))
+        )
   in
-  let others, exprs = block_aux tokens [] in
+  let others, exprs, errors = block_aux tokens [] [] in
   let exprs =
     match exprs with
     | last_expr :: tail -> BlockReturn last_expr :: tail
     | [] -> []
   in
-  (others, Block (List.rev exprs))
+  if List.length errors > 0 then
+    raise (BlockParseError (List.rev errors, others))
+  else (others, Block (List.rev exprs))
 
 and ignore_newlines (tokens, expr) =
   match tokens with
@@ -513,7 +619,8 @@ and primary tokens =
   | { t = LeftSquareBrace } :: others -> array others
   | { t = New } :: others -> class_instantiate others
   | { t = This } :: others -> (others, This)
-  | others -> raise (UnexpectedSequence others)
+  | others ->
+      raise (parse_error "Unexpected token (expected a primary token)" others)
 
 and class_instantiate tokens =
   let tokens_remaining, expr = maybe_call tokens in
@@ -539,4 +646,4 @@ and grouping tokens =
   let remaining_tokens, expr = expression tokens in
   match remaining_tokens with
   | { t = RightParen } :: others -> (others, Grouping expr)
-  | others -> raise (UnexpectedSequence others)
+  | others -> raise (parse_error "Expected ')' after group expression" others)
