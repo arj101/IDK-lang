@@ -20,6 +20,7 @@ let rec interpret expr =
   def_ext_funs env;
   def_consts env;
   Env.define env "Array" (gen_array_obj (Some env));
+  Env.define env "Math" (gen_math_obj (Some env));
   Env.define env "globalThis" (Object (Some "GlobalEnvironment", env));
   try eval_expr env expr
   with FnReturn value ->
@@ -56,8 +57,6 @@ and write_file env args =
       close_out out_channel;
       Literal Null
   | _ -> Literal Null
-
-and random _ _ = Literal (Num (Random.float 1.))
 
 and parse_num _ = function
   | Literal (Str s) :: _ -> (
@@ -106,60 +105,6 @@ and object_to_string _ = function
   | (Object _ as obj) :: _ -> Literal (Str (Ast.obj_to_string [] obj))
   | _ -> raise TypeError
 
-and cos _ = function
-  | Literal (Num n) :: _ -> Literal (Num (Float.cos n))
-  | _ -> raise TypeError
-
-and sin _ = function
-  | Literal (Num n) :: _ -> Literal (Num (Float.sin n))
-  | _ -> raise TypeError
-
-and tan _ = function
-  | Literal (Num n) :: _ -> Literal (Num (Float.tan n))
-  | _ -> raise TypeError
-
-and asin _ = function
-  | Literal (Num n) :: _ -> Literal (Num (Float.asin n))
-  | _ -> raise TypeError
-
-and acos _ = function
-  | Literal (Num n) :: _ -> Literal (Num (Float.acos n))
-  | _ -> raise TypeError
-
-and atan _ = function
-  | Literal (Num n) :: _ -> Literal (Num (Float.atan n))
-  | _ -> raise TypeError
-
-and atan2 _ = function
-  | Literal (Num y) :: Literal (Num x) :: others ->
-      Literal (Num (Float.atan2 y x))
-  | _ -> raise TypeError
-
-and pow _ = function
-  | Literal (Num n) :: Literal (Num p) :: others ->
-      Literal (Num (Float.pow n p))
-  | _ -> raise TypeError
-
-and sqrt _ = function
-  | Literal (Num n) :: _ -> Literal (Num (Float.sqrt n))
-  | _ -> raise TypeError
-
-and ln _ = function
-  | Literal (Num n) :: _ -> Literal (Num (Float.log n))
-  | _ -> raise TypeError
-
-and log2 _ = function
-  | Literal (Num n) :: _ -> Literal (Num (Float.log2 n))
-  | _ -> raise TypeError
-
-and log10 _ = function
-  | Literal (Num n) :: _ -> Literal (Num (Float.log10 n))
-  | _ -> raise TypeError
-
-and exp _ = function
-  | Literal (Num n) :: _ -> Literal (Num (Float.exp n))
-  | _ -> raise TypeError
-
 and getenv _ = function
   | Literal (Str s) :: _ ->
       Literal
@@ -204,7 +149,6 @@ and def_ext_funs env =
   def_fn "println" [ "value" ] println;
   def_fn "read_to_string" [ "path" ] read_file;
   def_fn "write_to_file" [ "path"; "contents" ] write_file;
-  def_fn "random" [] random;
   def_fn "parse_num" [ "str" ] parse_num;
   def_fn "typeof" [ "value" ] typeof;
   def_fn "eval" [ "code_str" ] eval;
@@ -213,19 +157,6 @@ and def_ext_funs env =
   def_fn "exec" [ "command" ] exec;
   def_fn "JSON_dot_stringify" [ "object" ] object_to_string;
   def_fn "stringify" [ "object" ] object_to_string;
-  def_fn "cos" [ "num" ] cos;
-  def_fn "sin" [ "num" ] sin;
-  def_fn "tan" [ "num" ] tan;
-  def_fn "asin" [ "num" ] asin;
-  def_fn "acos" [ "num" ] acos;
-  def_fn "atan" [ "num" ] atan;
-  def_fn "atan2" [ "x"; "y" ] atan2;
-  def_fn "pow" [ "num"; "pow" ] pow;
-  def_fn "sqrt" [ "num" ] sqrt;
-  def_fn "ln" [ "num" ] ln;
-  def_fn "log2" [ "num" ] log2;
-  def_fn "log10" [ "num" ] log10;
-  def_fn "exp" [ "num" ] exp;
   def_fn "sys_getenv" [ "name" ] getenv;
   def_fn "length" [ "array" ] array_length;
   def_fn "stoa" [ "string" ] string_to_ascii;

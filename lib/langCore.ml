@@ -264,3 +264,82 @@ let gen_array_obj parent_env : value =
   def_fn "find" [ "array"; "finder_fn" ] array_find;
 
   array_obj
+
+module Math = struct
+  let cos _ = function
+    | Literal (Num n) :: _ -> Literal (Num (Float.cos n))
+    | _ -> raise TypeError
+
+  let sin _ = function
+    | Literal (Num n) :: _ -> Literal (Num (Float.sin n))
+    | _ -> raise TypeError
+
+  let tan _ = function
+    | Literal (Num n) :: _ -> Literal (Num (Float.tan n))
+    | _ -> raise TypeError
+
+  let asin _ = function
+    | Literal (Num n) :: _ -> Literal (Num (Float.asin n))
+    | _ -> raise TypeError
+
+  let acos _ = function
+    | Literal (Num n) :: _ -> Literal (Num (Float.acos n))
+    | _ -> raise TypeError
+
+  let atan _ = function
+    | Literal (Num n) :: _ -> Literal (Num (Float.atan n))
+    | _ -> raise TypeError
+
+  let atan2 _ = function
+    | Literal (Num y) :: Literal (Num x) :: others ->
+        Literal (Num (Float.atan2 y x))
+    | _ -> raise TypeError
+
+  let pow _ = function
+    | Literal (Num n) :: Literal (Num p) :: others ->
+        Literal (Num (Float.pow n p))
+    | _ -> raise TypeError
+
+  let sqrt _ = function
+    | Literal (Num n) :: _ -> Literal (Num (Float.sqrt n))
+    | _ -> raise TypeError
+
+  let ln _ = function
+    | Literal (Num n) :: _ -> Literal (Num (Float.log n))
+    | _ -> raise TypeError
+
+  let log2 _ = function
+    | Literal (Num n) :: _ -> Literal (Num (Float.log2 n))
+    | _ -> raise TypeError
+
+  let log10 _ = function
+    | Literal (Num n) :: _ -> Literal (Num (Float.log10 n))
+    | _ -> raise TypeError
+
+  let exp _ = function
+    | Literal (Num n) :: _ -> Literal (Num (Float.exp n))
+    | _ -> raise TypeError
+
+  let random _ _ = Literal (Num (Random.float 1.))
+end
+
+let gen_math_obj parent_env : value =
+  Random.self_init ();
+  let env = Env.create parent_env in
+  let math_obj = Object (Some "Math", env) in
+  let def_fn name params f = Env.define env name (ExtFun (name, params, f)) in
+  def_fn "cos" [ "num" ] Math.cos;
+  def_fn "sin" [ "num" ] Math.sin;
+  def_fn "tan" [ "num" ] Math.tan;
+  def_fn "asin" [ "num" ] Math.asin;
+  def_fn "acos" [ "num" ] Math.acos;
+  def_fn "atan" [ "num" ] Math.atan;
+  def_fn "atan2" [ "x"; "y" ] Math.atan2;
+  def_fn "pow" [ "num"; "pow" ] Math.pow;
+  def_fn "sqrt" [ "num" ] Math.sqrt;
+  def_fn "ln" [ "num" ] Math.ln;
+  def_fn "log2" [ "num" ] Math.log2;
+  def_fn "log10" [ "num" ] Math.log10;
+  def_fn "exp" [ "num" ] Math.exp;
+  def_fn "random" [] Math.random;
+  math_obj
