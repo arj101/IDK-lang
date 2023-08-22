@@ -54,7 +54,7 @@ type tokentype =
   | New
   | Class
 
-type span = { pos : int; line : int; col : int }
+type span = { line : int; col : int; length: int }
 type token = { t : tokentype; span : span }
 
 let string_of_tokentype (t : tokentype) : string =

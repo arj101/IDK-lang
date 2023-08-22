@@ -1,214 +1,196 @@
 open Token
 open Ast
+open AnsiFormatter
 
 exception UnexpectedCharacter of char
 exception UnexpectedEof
-exception Unimplemented of string
-exception ParsedVal
-exception AtEnd
+
+let rec consume_single_line_comment = function
+  | '\n' :: others -> others
+  | [] -> []
+  | c :: others -> consume_single_line_comment others
+
+let rec consume_multiline_comment = function
+  | '*' :: '/' :: others -> others
+  | '/' :: '*' :: others ->
+      consume_multiline_comment others
+      |> consume_multiline_comment (*nested comments*)
+  | [] -> []
+  | c :: others -> consume_multiline_comment others
+
+let parse_number chars =
+  let num_chars = Buffer.create 16 in
+
+  let rec sign = function
+    | ('-' as s) :: others | ('+' as s) :: others ->
+        Buffer.add_char num_chars s;
+        others
+    | others -> others
+  in
+  let rec integer = function
+    | ('0' .. '9' as n) :: others ->
+        Buffer.add_char num_chars n;
+        integer others
+    | others -> others
+  in
+  let decimal = function
+    | '.' :: others ->
+        Buffer.add_char num_chars '.';
+        integer others
+    | others -> others
+  in
+  let exponent = function
+    | 'E' :: others | 'e' :: others ->
+        Buffer.add_char num_chars 'E';
+        let others = sign others in
+        integer others
+    | others -> others
+  in
+
+  let chars = sign chars in
+  let chars = integer chars in
+  let chars = decimal chars in
+  let chars = exponent chars in
+
+  ( Number (float_of_string (Buffer.contents num_chars)),
+    Buffer.length num_chars,
+    chars )
+
+let parse_word chars =
+  let word_chars = Buffer.create 16 in
+  let rec word_start = function
+    | ('a' .. 'z' as c) :: others
+    | ('A' .. 'Z' as c) :: others
+    | ('_' as c) :: others ->
+        Buffer.add_char word_chars c;
+        Ok others
+    | others -> Error others
+  in
+  let rec aux = function
+    | ('a' .. 'z' as c) :: others
+    | ('A' .. 'Z' as c) :: others
+    | ('_' as c) :: others
+    | ('0' .. '9' as c) :: others ->
+        Buffer.add_char word_chars c;
+        aux others
+    | others -> others
+  in
+  let chars = Result.get_ok (word_start chars) in
+  let chars = aux chars in
+  (Buffer.contents word_chars, chars)
+
+let parse_string chars delimiter =
+  let string_chars = Buffer.create 16 in
+  let chars =
+    match chars with
+    | c :: others when c == delimiter -> others
+    | _ -> assert false
+  in
+
+  let rec aux = function
+    | '\\' :: 'r' :: others ->
+        Buffer.add_char string_chars '\r';
+        aux others
+    | '\\' :: 't' :: others ->
+        Buffer.add_char string_chars '\t';
+        aux others
+    | '\\' :: '\\' :: others ->
+        Buffer.add_char string_chars '\\';
+        aux others
+    | '\\' :: c :: others when c == delimiter ->
+        Buffer.add_char string_chars c;
+        aux others
+    | c :: others when c == delimiter -> others
+    | c :: others ->
+        Buffer.add_char string_chars c;
+        aux others
+    | [] -> raise UnexpectedEof
+  in
+
+  let chars = aux chars in
+  (Str (Buffer.contents string_chars), Buffer.length string_chars + 2, chars)
+
+let parse_keyword_or_ident chars =
+  let word, chars = parse_word chars in
+  let token =
+    match word with
+    | "fun" -> Fun
+    | "this" -> This
+    | "if" -> If
+    | "else" -> Else
+    | "while" -> While
+    | "do" -> Do
+    | "for" -> For
+    | "true" -> True
+    | "false" -> False
+    | "null" -> Null
+    | "return" -> Return
+    | "let" -> Let
+    | "then" -> Then
+    | "break" -> Break
+    | "new" -> New
+    | "class" -> Class
+    | "extends" -> Extends
+    | ident -> Ident ident
+  in
+  (token, String.length word, chars)
 
 let tokenise (s : string) : token list =
-  let line = ref 0 in
-  let pos = ref 0 in
-  let col = ref 0 in
-  let tokens = ref [] in
-
-  let add_token t =
-    tokens :=
-      !tokens
-      @ [ { t; span = { pos = !pos; line = !line; col = !col } } ];
-    col := !col + token_type_length t;
-    incr pos;
+  let chars = String.fold_left (fun chars c -> c :: chars) [] s |> List.rev in
+  let rec add_aux others line col tokens token length =
+    aux others line (col + length)
+      ({ t = token; span = { length; line; col } } :: tokens)
+  and aux chars line col tokens =
+    let add others token length = add_aux others line col tokens token length in
+    match chars with
+    | '\n' :: others -> aux others (line + 1) 0 tokens
+    | '\r' :: others | ' ' :: others -> aux others line (col + 1) tokens
+    | '\t' :: others ->
+        "warning: tab character may cause improper formatting in error reports \
+         ;)\n"
+        |> print_styled [ fg_color Yellow ];
+        aux others line (col + 1) tokens
+    | '(' :: others -> add others LeftParen 1
+    | ')' :: others -> add others RightParen 1
+    | '{' :: others -> add others LeftBrace 1
+    | '}' :: others -> add others RightBrace 1
+    | '[' :: others -> add others LeftSquareBrace 1
+    | ']' :: others -> add others RightSquareBrace 1
+    | ',' :: others -> add others Comma 1
+    | '.' :: others -> add others Dot 1
+    | '+' :: '=' :: others -> add others PlusEqual 2
+    | '+' :: others -> add others Plus 1
+    | '*' :: '=' :: others -> add others StarEqual 2
+    | '*' :: others -> add others Star 1
+    | '-' :: '=' :: others -> add others MinusEqual 2
+    | '-' :: others -> add others Minus 1
+    | '|' :: '|' :: others -> add others Or 2
+    | '&' :: '&' :: others -> add others And 2
+    | '%' :: '=' :: others -> add others PercentageEqual 2
+    | '%' :: others -> add others Percentage 1
+    | '!' :: '=' :: others -> add others BangEqual 2
+    | '!' :: others -> add others Bang 1
+    | '=' :: '=' :: others -> add others EqualEqual 2
+    | '=' :: others -> add others Equal 1
+    | '<' :: '=' :: others -> add others LessEqual 2
+    | '<' :: others -> add others Less 1
+    | '>' :: '=' :: others -> add others GreaterEqual 2
+    | '>' :: others -> add others Greater 1
+    | ';' :: others -> add others Semicolon 1
+    | ':' :: others -> add others Colon 1
+    | (('\'' as delimiter) :: others as chars)
+    | (('"' as delimiter) :: others as chars) ->
+        let str, length, others = parse_string chars delimiter in
+        add others str length
+    | '0' .. '9' :: others as chars ->
+        let num, num_len, others = parse_number chars in
+        add others num num_len
+    | ('a' .. 'z' :: others as chars)
+    | ('A' .. 'Z' :: others as chars)
+    | ('_' :: others as chars) ->
+        let token, length, others = parse_keyword_or_ident chars in
+        add others token length
+    | c :: others -> raise (UnexpectedCharacter c)
+    | [] -> tokens
   in
-
-  let match_next x =
-    if !pos < String.length s - 1 then
-      if s.[!pos + 1] == x then (
-        incr pos;
-        true)
-      else false
-    else false
-  in
-
-  let is_at_end pos = !pos >= String.length s in
-
-  let parse_string (delim : char) =
-    let sbuf = Buffer.create 16 in
-
-    let rec parse_string_aux len chars =
-      match chars with
-      | [] -> raise UnexpectedEof
-      | '\\' :: 'n' :: others ->
-          Buffer.add_char sbuf '\n';
-          parse_string_aux (len + 2) others
-      | '\\' :: '"' :: others ->
-          Buffer.add_char sbuf '"';
-          parse_string_aux (len + 2) others
-      | '\\' :: '\'' :: others ->
-          Buffer.add_char sbuf '\'';
-          parse_string_aux (len + 2) others
-      | '\\' :: 'r' :: others ->
-          Buffer.add_char sbuf '\r';
-          parse_string_aux (len + 2) others
-      | '\\' :: 't' :: others ->
-          Buffer.add_char sbuf '\t';
-          parse_string_aux (len + 2) others
-      | '\\' :: '\\' :: others ->
-          Buffer.add_char sbuf '\\';
-          parse_string_aux (len + 2) others
-      | c :: others ->
-          if Char.equal c delim then (len, Buffer.contents sbuf)
-          else (
-            Buffer.add_char sbuf c;
-            parse_string_aux (len + 1) others)
-    in
-
-    let explode_string s = List.init (String.length s) (String.get s) in
-    let ssub = String.sub s (!pos + 1) (String.length s - !pos - 1) in
-    let len, r = parse_string_aux 0 (explode_string ssub) in
-    pos := !pos + len + 1;
-    r
-  in
-
-  try
-    while !pos < String.length s do
-      match s.[!pos] with
-      | '(' -> add_token LeftParen
-      | ')' -> add_token RightParen
-      | '{' -> add_token LeftBrace
-      | '}' -> add_token RightBrace
-      | '[' -> add_token LeftSquareBrace
-      | ']' -> add_token RightSquareBrace
-      | ',' -> add_token Comma
-      | '.' -> add_token Dot
-      | '+' -> add_token (if match_next '=' then PlusEqual else Plus)
-      | '*' -> add_token (if match_next '=' then StarEqual else Star)
-      | '-' ->
-          add_token
-            (if match_next '=' then MinusEqual
-             else if match_next '>' then Dot
-             else Minus)
-      | '|' -> if match_next '|' then add_token Or else add_token Dot
-      | '&' -> if match_next '&' then add_token And else ()
-      | '%' ->
-          add_token (if match_next '=' then PercentageEqual else Percentage)
-      | '!' -> add_token (if match_next '=' then BangEqual else Bang)
-      | '=' -> add_token (if match_next '=' then EqualEqual else Equal)
-      | '<' -> add_token (if match_next '=' then LessEqual else Less)
-      | '>' -> add_token (if match_next '=' then GreaterEqual else Greater)
-      | '/' -> (
-          if !pos >= String.length s - 1 then raise UnexpectedEof
-          else
-            match s.[!pos + 1] with
-            | '/' ->
-                (try
-                   while s.[!pos] != '\n' do
-                     incr pos;
-                     if is_at_end pos then raise AtEnd else ()
-                   done
-                 with AtEnd -> ());
-                incr pos;
-                incr line
-            | '=' ->
-                incr pos;
-                add_token SlashEqual
-            | '*' -> raise (Unimplemented "Too lazy rn")
-            | _ -> add_token Slash)
-      | ';' -> add_token Semicolon
-      | ':' -> add_token Colon
-      | '\n' ->
-          incr line;
-          col := 0;
-          add_token Newline
-      | ' ' | '\t'  -> incr col; incr pos
-      | '\r'  -> incr pos 
-      | '"' -> add_token (Str (parse_string '"'))
-      | '\'' -> add_token (Str (parse_string '\''))
-      | '0' .. '9' ->
-          (let len = ref 0 in
-           let parse_num_sequence curr_len =
-             try
-               while match s.[!pos] with '0' .. '9' -> true | _ -> false do
-                 incr pos;
-                 incr curr_len;
-                 if is_at_end pos then raise AtEnd else ()
-               done
-             with AtEnd -> ()
-           in
-           try
-             parse_num_sequence len;
-
-             if
-               is_at_end pos
-               || (s.[!pos] != '.' && s.[!pos] != 'e')
-               || s.[!pos] == '.'
-                  && match s.[!pos + 1] with '0' .. '9' -> false | _ -> true
-             then raise ParsedVal
-             else incr pos;
-             incr len;
-             let parsed_e = s.[!pos - 1] == 'e' in
-
-             if parsed_e && s.[!pos] == '-' then (
-               incr pos;
-               incr len)
-             else ();
-
-             parse_num_sequence len;
-
-             if is_at_end pos || s.[!pos] != 'e' || parsed_e then
-               raise ParsedVal
-             else incr pos;
-             incr len;
-             if s.[!pos] == '-' then (
-               incr pos;
-               incr len)
-             else ();
-
-             parse_num_sequence len;
-
-             raise ParsedVal
-           with ParsedVal ->
-             let snum = String.sub s (!pos - !len) !len in
-             add_token (Number (float_of_string snum)));
-          decr pos (*idk why this is necessary*)
-      | 'a' .. 'z' | 'A' .. 'Z' | '_' -> (
-          let rec aux len =
-            if
-              (match s.[!pos] with
-              | 'a' .. 'z' | 'A' .. 'Z' | '_' | '0' .. '9' -> false
-              | _ -> true)
-              || is_at_end pos
-            then len
-            else (
-              incr pos;
-              if is_at_end pos then len + 1
-              else (*idk why this works*)
-                aux (len + 1))
-          in
-          let len = aux 0 in
-          let sub_s = String.sub s (!pos - len) len in
-          decr pos;
-          match sub_s with
-          | "fun" -> add_token Fun
-          | "this" -> add_token This
-          | "if" -> add_token If
-          | "else" -> add_token Else
-          | "while" -> add_token While
-          | "do" -> add_token Do
-          | "for" -> add_token For
-          (* | "print" -> add_token Print // uses external function calls for I/O *)
-          | "true" -> add_token True
-          | "false" -> add_token False
-          | "null" -> add_token Null
-          | "return" -> add_token Return
-          | "let" -> add_token Let
-          | "then" -> add_token Then
-          | "break" -> add_token Break
-          | "new" -> add_token New
-          | "class" -> add_token Class
-          | "extends" -> add_token Extends
-          | _ as sub_s -> add_token (Ident sub_s))
-      | c -> raise (UnexpectedCharacter c)
-    done;
-    raise End_of_file
-  with End_of_file -> !tokens
+  List.rev (aux chars 0 0 [])

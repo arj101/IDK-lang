@@ -44,8 +44,8 @@ let rec report_error file_name lines (error : parse_error) =
   Printf.printf "%s %s%s\n"
     (Printf.sprintf " %s|" (String.make line_num_len ' ')
     |> styled [ fg_color Cyan ])
-    (String.make (start_idx - 1) ' ')
-    (String.make (Token.token_length error.token) '^' |> styled [ fg_color Red ])
+    (String.make (start_idx) ' ')
+    (String.make (error.token.span.length) '^' |> styled [ fg_color Red ])
 
 let rec report_errors source_name lines (errors : parse_error list) =
   List.iter
