@@ -1,4 +1,5 @@
 open Idk
+open Token
 
 let run_test prev_tests name test =
   let test_num =
@@ -37,7 +38,7 @@ let test common_name (tests : (string * (unit -> bool)) list) =
   else ()
 
 let token_eq a b =
-  String.equal (Token.string_of_tokentype a) (Token.string_of_tokentype b)
+  String.equal (Token.string_of_token a) (Token.string_of_tokentype b)
 
 let tokenised_eq s t = List.equal token_eq (Lexer.tokenise s) t
 

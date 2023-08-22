@@ -1,16 +1,9 @@
-let arr = Array.init(8, fun (i): i * (if random() > 0.5 then 2 else 7))
+for 
+let i = 0 i 
+< 20 i
++= 1 print
+("AAA")
 
-println(arr)
-let ++ 3
-println(arr.find((fun (v) vfkfk349nf 2 )))
+println()
 
 
-class name {}
-
-fun >:( () ()
-
-println("REEE")
-
-let aa = REE()
-
-:>(()
