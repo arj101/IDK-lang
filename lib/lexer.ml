@@ -91,6 +91,8 @@ let parse_string chars delimiter =
     | '\\' :: 't' :: others ->
         Buffer.add_char string_chars '\t';
         aux others
+    | '\\' :: 'n' :: others -> Buffer.add_char string_chars '\n';
+       aux others
     | '\\' :: '\\' :: others ->
         Buffer.add_char string_chars '\\';
         aux others
