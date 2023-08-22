@@ -55,6 +55,8 @@ let rec report_errors source_name lines (errors : parse_error list) =
     errors
 
 and eval source_filename source print_ast =
+  let regex = Str.regexp "\t" in
+  let source = Str.global_replace regex "  " source in
   let lines = String.split_on_char '\n' source in
   let tokens = Lexer.tokenise source in
   (* let s = String.concat " " (List.map string_of_tokentype chars) in *)

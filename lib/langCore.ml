@@ -327,6 +327,13 @@ let gen_math_obj parent_env : value =
   Random.self_init ();
   let env = Env.create parent_env in
   let math_obj = Object (Some "Math", env) in
+
+  let def_num name value = Env.define env name (Literal (Num value)) in
+  def_num "PI" Float.pi;
+  def_num "E" (Float.exp 1.);
+  def_num "MAX_NUM" Float.max_float;
+  def_num "MIN_NUM" Float.min_float;
+
   let def_fn name params f = Env.define env name (ExtFun (name, params, f)) in
   def_fn "cos" [ "num" ] Math.cos;
   def_fn "sin" [ "num" ] Math.sin;

@@ -158,11 +158,5 @@ and def_ext_funs env =
   def_fn "atos" [ "ascii" ] ascii_to_string
 
 and def_consts env =
-  let def_num name value = Env.define env name (Literal (Num value)) in
-  def_num "PI" Float.pi;
-  def_num "E" (Float.exp 1.);
-  def_num "MAX_NUM" Float.max_float;
-  def_num "MIN_NUM" Float.min_float;
-
   Env.define env "sys_argv"
     (Array (ref (Array.map (fun v -> Literal (Str v)) Sys.argv)))
