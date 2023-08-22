@@ -1,9 +1,4 @@
-for 
-let i = 0 i 
-< 20 i
-+= 1 print
-("AAA")
-
+println(435.e-5)
 println()
 
 

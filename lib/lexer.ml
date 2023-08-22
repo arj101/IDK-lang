@@ -47,10 +47,7 @@ let parse_number chars =
     | others -> others
   in
 
-  let chars = sign chars in
-  let chars = integer chars in
-  let chars = decimal chars in
-  let chars = exponent chars in
+  let chars = sign chars |> integer |> decimal |> exponent in
 
   ( Number (float_of_string (Buffer.contents num_chars)),
     Buffer.length num_chars,
