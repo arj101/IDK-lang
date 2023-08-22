@@ -53,6 +53,37 @@ let parse_number chars =
     Buffer.length num_chars,
     chars )
 
+let parse_hex_digit c =
+  match Char.lowercase_ascii c with
+  | '0' -> 0
+  | '1' -> 1
+  | '2' -> 2
+  | '3' -> 3
+  | '4' -> 4
+  | '5' -> 5
+  | '6' -> 6
+  | '7' -> 7
+  | '8' -> 8
+  | '9' -> 9
+  | 'a' -> 10
+  | 'b' -> 11
+  | 'c' -> 12
+  | 'd' -> 13
+  | 'e' -> 14
+  | 'f' -> 15
+  | c -> raise (UnexpectedCharacter c)
+
+let parse_octal_digit = function
+  | '0' -> 0
+  | '1' -> 1
+  | '2' -> 2
+  | '3' -> 3
+  | '4' -> 4
+  | '5' -> 5
+  | '6' -> 6
+  | '7' -> 7
+  | c -> raise (UnexpectedCharacter c)
+
 let parse_word chars =
   let word_chars = Buffer.create 16 in
   let rec word_start = function
@@ -91,8 +122,19 @@ let parse_string chars delimiter =
     | '\\' :: 't' :: others ->
         Buffer.add_char string_chars '\t';
         aux others
-    | '\\' :: 'n' :: others -> Buffer.add_char string_chars '\n';
-       aux others
+    | '\\' :: 'n' :: others ->
+        Buffer.add_char string_chars '\n';
+        aux others
+    | '\\' :: 'x' :: h1 :: h0 :: others ->
+        (parse_hex_digit h1 lsl 4) + parse_hex_digit h0
+        |> Char.chr
+        |> Buffer.add_char string_chars;
+        aux others
+    | '\\' :: '0' :: o1 :: o0 :: others ->
+        (parse_octal_digit o1 lsl 3) + parse_octal_digit o0
+        |> Char.chr
+        |> Buffer.add_char string_chars;
+        aux others
     | '\\' :: '\\' :: others ->
         Buffer.add_char string_chars '\\';
         aux others
