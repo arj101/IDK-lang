@@ -23,7 +23,10 @@ let rec eval_expr env expr =
       | ObjectExpr fields -> object_expr env fields
       | ArrayExpr exprs -> eval_array env exprs
       | This -> Env.get (Option.get env.this_ref) "this"
-      | ClassDecl (name, parents, methods) ->
+      | ClassDecl (name, parents, methods) -> class_decl env name parents methods
+      | ClassInst expr -> class_inst env expr)
+
+and class_decl env name parents methods =
           Env.define_virtual env name
             (Class
                ( name,
@@ -39,7 +42,7 @@ let rec eval_expr env expr =
                    methods;
                  fields ));
           Literal Null
-      | ClassInst expr -> class_inst env expr)
+
 
 and class_inst env expr =
   match expr with
