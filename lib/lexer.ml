@@ -18,40 +18,7 @@ let rec consume_multiline_comment = function
   | [] -> []
   | c :: others -> consume_multiline_comment others
 
-let parse_number chars =
-  let num_chars = Buffer.create 16 in
-
-  let rec sign = function
-    | ('-' as s) :: others | ('+' as s) :: others ->
-        Buffer.add_char num_chars s;
-        others
-    | others -> others
-  in
-  let rec integer = function
-    | ('0' .. '9' as n) :: others ->
-        Buffer.add_char num_chars n;
-        integer others
-    | others -> others
-  in
-  let decimal = function
-    | '.' :: others ->
-        Buffer.add_char num_chars '.';
-        integer others
-    | others -> others
-  in
-  let exponent = function
-    | 'E' :: others | 'e' :: others ->
-        Buffer.add_char num_chars 'E';
-        let others = sign others in
-        integer others
-    | others -> others
-  in
-
-  let chars = sign chars |> integer |> decimal |> exponent in
-
-  ( Number (float_of_string (Buffer.contents num_chars)),
-    Buffer.length num_chars,
-    chars )
+type num_format = Hex | Octal
 
 let parse_hex_digit c =
   match Char.lowercase_ascii c with
@@ -83,6 +50,89 @@ let parse_octal_digit = function
   | '6' -> 6
   | '7' -> 7
   | c -> raise (UnexpectedCharacter c)
+
+let parse_hex chars =
+  let rec aux num chars len =
+    match chars with
+    | ('0' .. '9' as c) :: others
+    | ('a' .. 'z' as c) :: others
+    | ('A' .. 'Z' as c) :: others ->
+        aux ((num lsl 4) + parse_hex_digit c) others (len + 1)
+    | others -> (num, len, others)
+  in
+  aux 0 chars 0
+
+let parse_octal chars =
+  let rec aux num chars len =
+    match chars with
+    | ('0' .. '7' as c) :: others ->
+        aux ((num lsl 3) + parse_octal_digit c) others (len + 1)
+    | others -> (num, len, others)
+  in
+  aux 0 chars 0
+
+let parse_number chars =
+  let num_chars = Buffer.create 16 in
+
+  let rec sign = function
+    | '-' :: others -> (-1, others)
+    | others -> (1, others)
+  in
+
+  let rec sign_char = function
+    | ('-' as s) :: others | ('+' as s) :: others ->
+        Buffer.add_char num_chars s;
+        others
+    | others -> others
+  in
+
+  let rec non_base10 = function
+    | '0' :: 'x' :: others -> Ok (Hex, others)
+    | '0' :: 'o' :: others -> Ok (Octal, others)
+    | others -> Error others
+  in
+
+  let rec integer = function
+    | ('0' .. '9' as n) :: others ->
+        Buffer.add_char num_chars n;
+        integer others
+    | others -> others
+  in
+  let decimal = function
+    | '.' :: others ->
+        Buffer.add_char num_chars '.';
+        integer others
+    | others -> others
+  in
+  let exponent = function
+    | 'E' :: others | 'e' :: others ->
+        Buffer.add_char num_chars 'E';
+        let others = sign_char others in
+        integer others
+    | others -> others
+  in
+
+  let sign, chars = sign chars in
+
+  non_base10 chars
+  |> Result.map_error (fun chars ->
+         let chars = integer chars |> decimal |> exponent in
+
+         ( Number
+             (float_of_int sign *. float_of_string (Buffer.contents num_chars)),
+           (Buffer.length num_chars + if sign < 0 then 1 else 0),
+           chars ))
+  |> Result.map (fun (base, chars) ->
+         match base with
+         | Hex ->
+             let num, len, chars = parse_hex chars in
+             (Number (float_of_int num *. float_of_int sign), len + 2, chars)
+         | Octal ->
+             let num, len, chars = parse_octal chars in
+             (Number (float_of_int num *. float_of_int sign), len + 2, chars))
+  |> function
+  | Ok x -> x
+  | Error x -> x
 
 let parse_word chars =
   let word_chars = Buffer.create 16 in
