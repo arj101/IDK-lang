@@ -23,26 +23,26 @@ let rec eval_expr env expr =
       | ObjectExpr fields -> object_expr env fields
       | ArrayExpr exprs -> eval_array env exprs
       | This -> Env.get (Option.get env.this_ref) "this"
-      | ClassDecl (name, parents, methods) -> class_decl env name parents methods
+      | ClassDecl (name, parents, methods) ->
+          class_decl env name parents methods
       | ClassInst expr -> class_inst env expr)
 
 and class_decl env name parents methods =
-          Env.define_virtual env name
-            (Class
-               ( name,
-                 parents,
-                 let fields = Hashtbl.create (List.length methods) in
-                 List.iter
-                   (fun v ->
-                     match v with
-                     | Value (Fun (Some name, args, body)) ->
-                         Hashtbl.replace fields name
-                           (ClosureFun (env, Some name, args, body))
-                     | _ -> raise TypeError)
-                   methods;
-                 fields ));
-          Literal Null
-
+  Env.define_virtual env name
+    (Class
+       ( name,
+         parents,
+         let fields = Hashtbl.create (List.length methods) in
+         List.iter
+           (fun v ->
+             match v with
+             | Value (Fun (Some name, args, body)) ->
+                 Hashtbl.replace fields name
+                   (ClosureFun (env, Some name, args, body))
+             | _ -> raise TypeError)
+           methods;
+         fields ));
+  Literal Null
 
 and class_inst env expr =
   match expr with
@@ -326,6 +326,7 @@ and locator env lexpr rexpr =
             match expr with Call _ | Value (Variable _) -> true | _ -> false);
           let expr = eval_fn_args env expr in
           eval_expr (Env.create_object_wrapper fields) expr)
+  | Literal (Str _) -> primitve_method env lvalue rexpr
   | _ -> raise (TypeErrorWithInfo "dot operator can only be used with Objects")
 
 and call_aux parent_env name args params body_expr =

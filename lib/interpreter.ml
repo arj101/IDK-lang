@@ -21,6 +21,7 @@ let rec interpret expr =
   def_consts env;
   Env.define env "Array" (gen_array_obj (Some env));
   Env.define env "Math" (gen_math_obj (Some env));
+  Env.define env "String" (gen_string_obj (Some env));
   Env.define env "globalThis" (Object (Some "GlobalEnvironment", env));
   try eval_expr env expr
   with FnReturn value ->
