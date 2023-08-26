@@ -69,6 +69,10 @@ let text_format = function
   | Hidden -> 8
   | Strikethrough -> 9
 
-let print_styled styles text = Printf.printf "%s%s%s" (build_sequence styles) text reset
-let styled styles text = Printf.sprintf "%s%s%s" (build_sequence styles) text reset
+let print_styled styles text =
+  Printf.printf "%s%s%s" (build_sequence styles) text reset
+
+let styled styles text =
+  Printf.sprintf "%s%s%s" (build_sequence styles) text reset
+
 let style styles = build_sequence styles

@@ -54,7 +54,7 @@ type tokentype =
   | New
   | Class
 
-type span = { line : int; col : int; length: int }
+type span = { line : int; col : int; length : int }
 type token = { t : tokentype; span : span }
 
 let string_of_tokentype (t : tokentype) : string =
@@ -131,5 +131,5 @@ let token_type_length t =
 let token_length { t; _ } = token_type_length t
 let string_of_token { t; _ } = string_of_tokentype t
 
-
-let string_of_token_list tokens = String.concat ", " (List.map string_of_token tokens) 
+let string_of_token_list tokens =
+  String.concat ", " (List.map string_of_token tokens)

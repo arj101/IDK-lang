@@ -385,6 +385,16 @@ module CoreString = struct
         in
         Array (ref strings)
     | _ -> raise TypeError
+
+  module StringSplit = struct
+    let split_aux s s1 = 
+      let q = String.to_seq s1 |> Queue.of_seq in ()
+
+
+    let split_s _ = function
+      | Literal (Str s) :: Literal (Str split) :: _ -> Literal Null
+      | _ -> raise TypeError
+  end
 end
 
 let gen_string_obj parent_env : value =
@@ -395,6 +405,6 @@ let gen_string_obj parent_env : value =
   let def_fn name params f = Env.define env name (ExtFun (name, params, f)) in
 
   def_fn "repeat" [ "string"; "n" ] CoreString.repeat;
-  def_fn "split" [ "string"; "char"] CoreString.split;
+  def_fn "split" [ "string"; "char" ] CoreString.split;
 
   string_obj

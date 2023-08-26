@@ -80,8 +80,7 @@ and recover_from_unexpected_sequence_aux = function
   | { t = While } :: others -> Ok (while_expr others)
   | { t = For } :: others -> Ok (for_expr others)
   | { t = Class } :: others -> Ok (class_decl others)
-  | t :: others ->
-      recover_from_unexpected_sequence_aux others
+  | t :: others -> recover_from_unexpected_sequence_aux others
   | [] -> Error ()
 
 and recover_from_unexpected_sequence tokens =
@@ -619,8 +618,7 @@ and primary tokens =
   | { t = LeftSquareBrace } :: others -> array others
   | { t = New } :: others -> class_instantiate others
   | { t = This } :: others -> (others, This)
-  | others ->
-      raise (parse_error "Unexpected token" others)
+  | others -> raise (parse_error "Unexpected token" others)
 
 and class_instantiate tokens =
   let tokens_remaining, expr = maybe_call tokens in
