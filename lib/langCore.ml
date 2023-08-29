@@ -375,26 +375,87 @@ module CoreString = struct
     | Literal (Str s) :: _ -> Literal (Str (String.trim s))
     | _ -> raise TypeError
 
-  let split _ = function
-    | Literal (Str s) :: Literal (Str c) :: _ ->
-        assert (String.length c <= 1);
-        let c = String.get c 0 in
-        let strings =
-          String.split_on_char c s |> Array.of_list
-          |> Array.map (fun s -> Literal (Str s))
+  module SplitOnString = struct
+    let split_aux s divider =
+      let divc, divider_rem =
+        match String.to_seq divider |> List.of_seq with
+        | divc :: divider_rem -> (divc, divider_rem)
+        | _ -> assert false
+      in
+      let try_consume_divider s divider_rem =
+        let rec aux i s_rem divider_rem =
+          match (s_rem, divider_rem) with
+          | s, [] -> Ok (i, s)
+          | s :: s_rem, d :: divider_rem when s == d ->
+              aux (i + 1) s_rem divider_rem
+          | s_rem, divider_rem -> Error (i, s)
         in
-        Array (ref strings)
-    | _ -> raise TypeError
+        aux 0 s divider_rem
+      in
+      let rec find_occurences i s_rem =
+        let rec aux i s_rem accum =
+          match s_rem with
+          | [] -> List.rev accum
+          | s :: s_rem ->
+              if s == divc then
+                match try_consume_divider s_rem divider_rem with
+                | Ok (stride, s_rem) -> aux (1 + i + stride) s_rem (i :: accum)
+                | Error (stride, s_rem) -> aux (1 + i + stride) s_rem accum
+              else aux (i + 1) s_rem accum
+        in
+        aux i s_rem []
+      in
+      let split_on_occurences s divider occurences =
+        let divider_length = String.length divider in
+        let rec aux prev_pos occurences accum =
+          match occurences with
+          | [] ->
+              let length = String.length s - prev_pos in
+              String.sub s prev_pos length :: accum
+          | occurence :: rem ->
+              aux
+                (occurence + divider_length)
+                rem
+                (String.sub s prev_pos (occurence - prev_pos) :: accum)
+        in
+        aux 0 occurences []
+      in
+      let occurences = find_occurences 0 (String.to_seq s |> List.of_seq) in
+      let splitted_strings = split_on_occurences s divider occurences in
+      List.rev splitted_strings
 
-  module StringSplit = struct
-    let split_aux s s1 = 
-      let q = String.to_seq s1 |> Queue.of_seq in ()
-
-
-    let split_s _ = function
-      | Literal (Str s) :: Literal (Str split) :: _ -> Literal Null
+    let split_on_string _ = function
+      | Literal (Str s) :: Literal (Str split) :: _ ->
+          Array
+            (ref
+               (Array.of_list
+                  (split_aux s split |> List.map (fun s -> Literal (Str s)))))
       | _ -> raise TypeError
   end
+
+  let split _ = function
+    | Literal (Str s) :: Literal (Str divider) :: _ -> (
+        match String.length divider with
+        | 0 ->
+            Array
+              (ref
+                 (String.to_seq s |> List.of_seq |> Array.of_list
+                 |> Array.map (fun c -> Literal (Str (String.make 1 c)))))
+        (* | 1 -> *)
+        (*     let c = String.get s 0 in *)
+        (*     let strings = *)
+        (*       String.split_on_char c s |> Array.of_list *)
+        (* Apparently this is not the implementation we want *)
+        (*       |> Array.map (fun s -> Literal (Str s)) *)
+        (*     in *)
+        (*     Array (ref strings) *)
+        | _ ->
+            Array
+              (ref
+                 (Array.of_list
+                    (SplitOnString.split_aux s divider
+                    |> List.map (fun s -> Literal (Str s))))))
+    | _ -> raise TypeError
 end
 
 let gen_string_obj parent_env : value =
@@ -405,6 +466,6 @@ let gen_string_obj parent_env : value =
   let def_fn name params f = Env.define env name (ExtFun (name, params, f)) in
 
   def_fn "repeat" [ "string"; "n" ] CoreString.repeat;
-  def_fn "split" [ "string"; "char" ] CoreString.split;
+  def_fn "split" [ "string"; "divider" ] CoreString.split;
 
   string_obj
