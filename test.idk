@@ -1,38 +1,6 @@
-fun h_space(n) for let i = 0 i < n i+=1 do print(' ')
-fun v_space(n): for let j = 0 j < n j+=1 do println()
-
-class Rectangle {
-    Rectangle(x, y, w, h) {
-        this.x = x < this.y = y this.w = w this.h = h
-    }
 
 
-    fun display() {
-        v_space(this.y)
-
-        h_space(this.x)
-         for let i = 0 i < this.w i += 1 do print('-')
-	 println()
-	 for let i = 0 i < this.h i += 1 {
-	      h_space(this.x-1)
-	      print('|')
-	      h_space(this.w)
-	      print('|')
-	      println()
-	 }
-        
-        h_space(this.x)
-         for let i = 0 i < this.w i += 1 do print('-')
-	 println()
-    }
-}
-
-let r = new Rectangle(40, 5, 6, 7);
-
-let ++ = --
-
-r.display()
-println(435.e-5)
+let a = "sfjsf sfjsfjf"
 
 
-
+println(a.split("sfjsf").filter(fun (x): x.trim().length() > 0))

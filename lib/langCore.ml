@@ -357,6 +357,16 @@ let gen_math_obj parent_env : value =
   math_obj
 
 module CoreString = struct
+  let starts_with _ = function
+    | Literal (Str s) :: Literal (Str prefix) :: _ ->
+        Literal (Bool (String.starts_with s ~prefix))
+    | _ -> raise TypeError
+
+  let ends_with _ = function
+    | Literal (Str s) :: Literal (Str suffix) :: _ ->
+        Literal (Bool (String.ends_with s ~suffix))
+    | _ -> raise TypeError
+
   let repeat _ = function
     | Literal (Str s) :: Literal (Num n) :: _ ->
         let n = int_of_float n in
@@ -456,6 +466,10 @@ module CoreString = struct
                     (SplitOnString.split_aux s divider
                     |> List.map (fun s -> Literal (Str s))))))
     | _ -> raise TypeError
+
+  let length _ = function
+    | Literal (Str s) :: _ -> Literal (Num (String.length s |> float_of_int))
+    | _ -> raise TypeError
 end
 
 let gen_string_obj parent_env : value =
@@ -467,5 +481,9 @@ let gen_string_obj parent_env : value =
 
   def_fn "repeat" [ "string"; "n" ] CoreString.repeat;
   def_fn "split" [ "string"; "divider" ] CoreString.split;
+  def_fn "trim" [ "string"; ] CoreString.trim;
+  def_fn "starts_with" [ "string" ] CoreString.starts_with;
+  def_fn "ends_with" [ "string" ] CoreString.ends_with;
+  def_fn "length" [ "string" ] CoreString.length;
 
   string_obj

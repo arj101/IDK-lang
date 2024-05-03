@@ -80,6 +80,8 @@ and recover_from_unexpected_sequence_aux = function
   | { t = While } :: others -> Ok (while_expr others)
   | { t = For } :: others -> Ok (for_expr others)
   | { t = Class } :: others -> Ok (class_decl others)
+  | { t = LeftParen } :: others -> Ok (grouping others)
+  | { t = LeftBrace } :: _ as tokens -> Ok (block_expr tokens)
   | t :: others -> recover_from_unexpected_sequence_aux others
   | [] -> Error ()
 
@@ -179,7 +181,8 @@ and class_decl tokens =
   | others -> raise (default_parse_error others)
 
 and maybe_object tokens =
-  let remaining_tokens = consume_newlines tokens in
+  let remaining_tokens = match tokens with | { t = LeftBrace } :: others -> others | _ -> assert false in
+  let remaining_tokens = consume_newlines remaining_tokens in
   match remaining_tokens with
   | { t = Ident name } :: others | { t = Str name } :: others -> (
       match consume_newlines others with
@@ -386,8 +389,8 @@ and fun_expr tokens =
   let remaining_tokens, body_expr =
     match remaining_tokens with
     | { t = Colon } :: others -> expression others
-    | { t = LeftBrace } :: others -> block_expr others
-    | others -> raise (parse_error "Expected either a ':' or '{'" others)
+    | { t = LeftBrace } :: _ as tokens -> block_expr tokens
+    | others -> raise (parse_error "Expected either ':' or '{'" others)
   in
 
   (remaining_tokens, Value (Fun (name_ident, List.rev ident_list, body_expr)))
@@ -405,9 +408,16 @@ and while_expr tokens =
   (remaining_tokens, While (cond_expr, loop_expr))
 
 and block_expr tokens =
+  let tokens_remaining =
+    match tokens with
+    | { t = LeftBrace } :: others -> others
+    | _ -> assert false
+  in
   let rec block_aux tokens_remaining expr_accum errors_accum =
     match tokens_remaining with
-    | [] -> raise UnexpectedEof
+    | [] ->
+        raise
+          (parse_error "No subsequest closing delimiter (expected '}')" tokens)
     | { t = Newline } :: others | { t = Semicolon } :: others ->
         block_aux others expr_accum errors_accum
     | { t = RightBrace } :: others -> (others, expr_accum, errors_accum)
@@ -431,7 +441,7 @@ and block_expr tokens =
                 (remaining_tokens, expr_accum, List.append errors errors_accum))
         )
   in
-  let others, exprs, errors = block_aux tokens [] [] in
+  let others, exprs, errors = block_aux tokens_remaining [] [] in
   let exprs =
     match exprs with
     | last_expr :: tail -> BlockReturn last_expr :: tail
@@ -605,7 +615,7 @@ and primary tokens =
   match tokens with
   | { t = Newline } :: others -> primary others
   | { t = LeftParen } :: others -> grouping others
-  | { t = LeftBrace } :: others -> maybe_object others
+  | { t = LeftBrace } :: _ as tokens -> maybe_object tokens
   | { t = True } :: others -> (others, Value (Literal (Bool true)))
   | { t = False } :: others -> (others, Value (Literal (Bool false)))
   | { t = Null } :: others -> (others, Value (Literal Null))

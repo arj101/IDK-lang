@@ -32,7 +32,7 @@ let rec report_error file_name lines (error : parse_error) =
 
   print_string "-> ";
   Printf.sprintf "%s\n" file_name |> print_styled [ fg_color Cyan ];
-  print_styled [ text_format Bold; fg_color Red ] "error: ";
+  print_styled [ text_format Bold; fg_color BrightRed ] "error: ";
   Printf.sprintf "%s\n" error.info |> print_styled [ text_format Bold ];
 
   print_endline
@@ -46,6 +46,30 @@ let rec report_error file_name lines (error : parse_error) =
     |> styled [ fg_color Cyan ])
     (String.make start_idx ' ')
     (String.make error.token.span.length '^' |> styled [ fg_color Red ])
+
+let rec report_eof_error file_name lines (error_info : string) =
+  let line_number = List.length lines - 1 in
+  let start_idx = String.length (List.nth lines line_number) - 2 in
+  let start_idx = if start_idx < 0 then 0 else start_idx in
+  let line_num_str = string_of_int (line_number + 1) in
+  let line_num_len = String.length line_num_str in
+
+  print_string "-> ";
+  Printf.sprintf "%s\n" file_name |> print_styled [ fg_color Cyan ];
+  print_styled [ text_format Bold; fg_color BrightRed ] "error: ";
+  Printf.sprintf "%s\n" error_info |> print_styled [ text_format Bold ];
+
+  print_endline
+    (Printf.sprintf " %s|" (String.make line_num_len ' ')
+    |> styled [ fg_color Cyan ]);
+  Printf.printf "%s %s\n"
+    (Printf.sprintf " %s|" line_num_str |> styled [ fg_color Cyan ])
+    (List.nth lines line_number);
+  Printf.printf "%s %s%s\n"
+    (Printf.sprintf " %s|" (String.make line_num_len ' ')
+    |> styled [ fg_color Cyan ])
+    (String.make start_idx ' ')
+    (String.make 1 '^' |> styled [ fg_color Red ])
 
 let rec report_errors source_name lines (errors : parse_error list) =
   List.iter
@@ -62,15 +86,17 @@ and eval source_filename source print_ast =
   (* let s = String.concat " " (List.map string_of_tokentype chars) in *)
   (* print_string s; *)
   (* print_string "\n\n"; *)
-  match parse tokens with
-  | Ok parse_result ->
-      if print_ast then (
-        print_string (string_of_expr parse_result);
-        print_string "\n\nExecuting...\n\n")
-      else ();
-      let _ = Interpreter.interpret parse_result in
-      ()
-  | Error errors -> report_errors source_filename lines errors
+  try
+    match parse tokens with
+    | Ok parse_result ->
+        if print_ast then (
+          print_string (string_of_expr parse_result);
+          print_string "\n\nExecuting...\n\n")
+        else ();
+        let _ = Interpreter.interpret parse_result in
+        ()
+    | Error errors -> report_errors source_filename lines errors
+  with EofParseError info -> report_eof_error source_filename lines info
 (* print_string (String.concat " " (List.map string_of_token tokens)) *)
 
 and eval_source path =
