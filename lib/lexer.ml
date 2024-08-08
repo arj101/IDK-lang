@@ -134,12 +134,16 @@ let parse_number chars =
   | Ok x -> x
   | Error x -> x
 
+let boundarychars = " \t\n\r(){}[];,.+-*/%&|^!~<>?:=\\\"'"
+
 let parse_word chars =
   let word_chars = Buffer.create 16 in
   let rec word_start = function
     | ('a' .. 'z' as c) :: others
     | ('A' .. 'Z' as c) :: others
-    | ('_' as c) :: others ->
+    | ('_' as c) :: others
+    | c :: others
+      when not (String.contains boundarychars c) ->
         Buffer.add_char word_chars c;
         Ok others
     | others -> Error others
@@ -148,7 +152,9 @@ let parse_word chars =
     | ('a' .. 'z' as c) :: others
     | ('A' .. 'Z' as c) :: others
     | ('_' as c) :: others
-    | ('0' .. '9' as c) :: others ->
+    | ('0' .. '9' as c) :: others
+    | c :: others
+      when not (String.contains boundarychars c) ->
         Buffer.add_char word_chars c;
         aux others
     | others -> others
@@ -222,6 +228,7 @@ let parse_keyword_or_ident chars =
     | "new" -> New
     | "class" -> Class
     | "extends" -> Extends
+    | "⨀" | "dot" -> DotProduct
     | ident -> Ident ident
   in
   (token, String.length word, chars)
@@ -276,9 +283,11 @@ let tokenise (s : string) : token list =
     | '0' .. '9' :: others as chars ->
         let num, num_len, others = parse_number chars in
         add others num num_len
-    | ('a' .. 'z' :: others as chars)
-    | ('A' .. 'Z' :: others as chars)
-    | ('_' :: others as chars) ->
+    | (('a' .. 'z' as c) :: others as chars)
+    | (('A' .. 'Z' as c) :: others as chars)
+    | (('_' as c) :: others as chars)
+    | (c :: others as chars)
+      when not (String.contains boundarychars c) ->
         let token, length, others = parse_keyword_or_ident chars in
         add others token length
     | c :: others -> raise (UnexpectedCharacter c)

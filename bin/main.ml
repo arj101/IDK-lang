@@ -83,9 +83,12 @@ and eval source_filename source print_ast =
   let source = Str.global_replace regex "  " source in
   let lines = String.split_on_char '\n' source in
   let tokens = Lexer.tokenise source in
-  (* let s = String.concat " " (List.map string_of_tokentype chars) in *)
-  (* print_string s; *)
-  (* print_string "\n\n"; *)
+  (* let s =
+       String.concat " "
+         (List.map string_of_tokentype (List.map (fun t -> t.t) tokens))
+     in
+     print_string s;
+     print_string "\n\n";*)
   try
     match parse tokens with
     | Ok parse_result ->

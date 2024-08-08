@@ -400,10 +400,44 @@ and eval_binary env expr_l op expr_r =
   | Token.Percentage -> modulo env lr
   | Token.And -> and_op env lr
   | Token.Or -> or_op env lr
+  | Token.DotProduct -> dotp_op env lr
   | _ -> raise UnexpectedOperator
 
 and and_op env (l, r) = Literal (Bool (to_bool env l && to_bool env r))
 and or_op env (l, r) = if to_bool env l then l else r
+
+and try_to_array env = function
+  | Literal (Str s) ->
+      Array
+        (ref
+           (String.to_seq s |> Array.of_seq
+           |> Array.map (fun c -> Literal (Str (String.make 1 c)))))
+  | others -> others
+
+and dotp_op env lr =
+  let lr = (try_to_array env (fst lr), try_to_array env (snd lr)) in
+  match lr with
+  | Array a1, Array a2 -> (
+      let a1 = Array.to_list !a1 in
+      let a2 = Array.to_list !a2 in
+      let dot_p_term accum x y = add env (accum, mult env (x, y)) in
+      let rec aux a1 a2 accum =
+        match (a1, a2) with
+        | x :: xs, y :: ys -> (
+            match accum with
+            | Some v -> aux xs ys (Some (dot_p_term v x y))
+            | None -> aux xs ys (Some (mult env (x, y))))
+        | _ -> accum
+      in
+      match aux a1 a2 None with Some v -> v | None -> Literal Null)
+  | Array a1, Literal (Num s) | Literal (Num s), Array a1 ->
+      Array
+        (ref
+           (Array.of_list
+              (List.map
+                 (fun x -> mult env (x, Literal (Num s)))
+                 (Array.to_list !a1))))
+  | _ -> raise (TypeErrorWithInfo "dot product can only be used with arrays")
 
 and add env lr =
   let lr =
@@ -430,6 +464,26 @@ and sub env = function
 
 and mult env = function
   | Literal (Num n1), Literal (Num n2) -> Literal (Num (n1 *. n2))
+  | Literal (Num n1), Literal (Str s) | Literal (Str s), Literal (Num n1) ->
+      Literal
+        (Str (String.concat "" (List.init (int_of_float n1) (fun _ -> s))))
+  | Literal (Str s1), Literal (Str s2) ->
+      let a1, a2 =
+        ( String.to_seq s1 |> Array.of_seq
+          |> Array.map (fun c -> Literal (Str (String.make 1 c))),
+          String.to_seq s2 |> Array.of_seq
+          |> Array.map (fun c -> Literal (Str (String.make 1 c))) )
+      in
+      let l1, l2 = (Array.length a1, Array.length a2) in
+      let rec build_string accum i =
+        if i < l1 * l2 then
+          build_string
+            (add env
+               (accum, add env (Array.get a1 (i mod l1), Array.get a2 (i / l1))))
+            (i + 1)
+        else accum
+      in
+      build_string (Literal (Str "")) 0
   | Array a1, Array a2 ->
       let l1, l2 = (Array.length !a1, Array.length !a2) in
       Array

@@ -1,6 +1,4 @@
 
 
-let a = "sfjsf sfjsfjf"
 
-
-println(a.split("sfjsf").filter(fun (x): x.trim().length() > 0))
+println( ["hello", "bye"] ⨀ ["world", "earth"] )

@@ -181,7 +181,11 @@ and class_decl tokens =
   | others -> raise (default_parse_error others)
 
 and maybe_object tokens =
-  let remaining_tokens = match tokens with | { t = LeftBrace } :: others -> others | _ -> assert false in
+  let remaining_tokens =
+    match tokens with
+    | { t = LeftBrace } :: others -> others
+    | _ -> assert false
+  in
   let remaining_tokens = consume_newlines remaining_tokens in
   match remaining_tokens with
   | { t = Ident name } :: others | { t = Str name } :: others -> (
@@ -540,6 +544,7 @@ and factor tokens =
     match consume_newlines tokens_remaining with
     | ({ t = Slash } as operator) :: others
     | ({ t = Star } as operator) :: others
+    | ({ t = DotProduct } as operator) :: others
     | ({ t = Percentage } as operator) :: others ->
         factor_aux others (Binary (acc, prev_operator, expr)) operator
     | others -> (others, Binary (acc, prev_operator, expr))
@@ -548,6 +553,7 @@ and factor tokens =
   match consume_newlines tokens_remaining with
   | ({ t = Slash } as operator) :: others
   | ({ t = Star } as operator) :: others
+  | ({ t = DotProduct } as operator) :: others
   | ({ t = Percentage } as operator) :: others ->
       factor_aux others leftmost_expr operator
   | others -> (others, leftmost_expr)

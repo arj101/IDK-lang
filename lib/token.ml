@@ -53,6 +53,7 @@ type tokentype =
   | Break
   | New
   | Class
+  | DotProduct
 
 type span = { line : int; col : int; length : int }
 type token = { t : tokentype; span : span }
@@ -113,6 +114,7 @@ let string_of_tokentype (t : tokentype) : string =
   | Then -> "then"
   | Break -> "break"
   | Colon -> ":"
+  | DotProduct -> "Dotp"
 
 let token_type_length t =
   match t with
