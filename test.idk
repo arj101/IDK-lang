@@ -1,4 +1,10 @@
 
+println([1 5 25 ].filter(fun (x): x > 10))
+
+fun close(x) {
+    let y = 5
+    return fun (): x + y
+}
 
 
-println( ["hello", "bye"] ⨀ ["world", "earth"] )
+println(close(5)())
