@@ -13,8 +13,7 @@ The lexer might be broken idk, I didnt test it.
 * Very efficient syntax, no need of semicolons or newlines, just write everything on a single line if you feel like it ;)
   * Commas are optional in arrays and function parameters.
 * Identifiers can be non unicode, so feel free to use emojis as variable names, but idk if it will work, i didnt test it (works with the dot product symbol though ⨀)
-
-
+* Written entirely in OCaml
 
 Sample code:
 ```
