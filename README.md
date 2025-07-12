@@ -5,10 +5,15 @@ Supports object oriented programming through a very unsound implementation(and i
 Also can make functional programming nerds happy with first class functions, closures and array iterator functions.
 The lexer might be broken idk, I didnt test it.
 
+### Features
+* Custom parser, lexer, and interpreter.
+* First class functions and closures
+* Classes, and inheritance (unsound implementation of inheritance)
+* Basic core library with string, array, math, and system utility functions
 * Very efficient syntax, no need of semicolons or newlines, just write everything on a single line if you feel like it ;)
   * Commas are optional in arrays and function parameters.
-
 * Identifiers can be non unicode, so feel free to use emojis as variable names, but idk if it will work, i didnt test it (works with the dot product symbol though ⨀)
+
 
 
 Sample code:
@@ -23,7 +28,7 @@ fun close(x) {
 println(close(5)())
 ```
 
-**How to run**
+### How to run
 * Ensure that you have OCaml installed, along with dune
 ```
 dune exec --profile release idk path/to/code/file.idk
